@@ -8,6 +8,7 @@ import { ROUTE_BASE, apply } from '../index.js'
 
 const SESSION_ID = 'session-11111111-1111-4111-8111-111111111111'
 const GHOST_ID = 'session-22222222-2222-4222-8222-222222222222'
+const ACTIVE_ID = 'session-33333333-3333-4333-8333-333333333333'
 
 function header(id, overrides = {}) {
   return {
@@ -30,11 +31,13 @@ function snapshot(id) {
   }
 }
 
-function makeHarness({ getter = true } = {}) {
+function makeHarness({ getter = true, tools = false, config } = {}) {
   const routes = new Map()
   const listeners = new Map()
   const archived = new Set([SESSION_ID, GHOST_ID])
   const entries = new Map()
+  const registeredTools = new Map()
+  const archiveCalls = []
 
   const workspace = {
     id: 'workspace-1',
@@ -65,9 +68,26 @@ function makeHarness({ getter = true } = {}) {
       list() {
         return [workspace]
       },
+      async archiveSession(id, options) {
+        archiveCalls.push({ id, options })
+        if (id === ACTIVE_ID && options?.stopActivity !== true) {
+          const error = new Error('session is active')
+          error.name = 'WorkspaceActiveSessionError'
+          error.sessionId = id
+          error.activity = [{ kind: 'turn', items: [{ id: 'turn-1', label: 'Running turn' }] }]
+          throw error
+        }
+        archived.add(id)
+      },
       async unarchiveSession(id) {
         archived.delete(id)
       },
+    },
+    async waterfall(name, payload, fallback) {
+      if (name === 'workspace/session-activity' && payload?.sessionId === ACTIVE_ID) {
+        return [{ kind: 'turn', items: [{ id: 'turn-1', label: 'Running turn' }] }]
+      }
+      return typeof fallback === 'function' ? fallback() : undefined
     },
     workspaceController: {
       async *follow() {
@@ -82,6 +102,11 @@ function makeHarness({ getter = true } = {}) {
         return [{
           header: header(SESSION_ID),
           live: false,
+          persisted: true,
+          formatStatus: 'ok',
+        }, {
+          header: header(ACTIVE_ID, { createdAt: 1_700_000_000_500, lastActivityAt: 1_700_000_009_000 }),
+          live: true,
           persisted: true,
           formatStatus: 'ok',
         }]
@@ -102,7 +127,22 @@ function makeHarness({ getter = true } = {}) {
                 },
               },
             }
-          : { sessionId, status: 'rejected', reason: 'missing' })
+          : sessionId === ACTIVE_ID
+            ? {
+                sessionId,
+                status: 'fulfilled',
+                value: {
+                  session: header(sessionId),
+                  title: {
+                    title: 'Active coding',
+                    messageSeqs: [1],
+                    source: 'first-prompt',
+                    eventSeq: 1,
+                    updatedAt: 1_700_000_000_600,
+                  },
+                },
+              }
+            : { sessionId, status: 'rejected', reason: 'missing' })
       },
       readSession(id) {
         if (id !== SESSION_ID) {
@@ -132,6 +172,14 @@ function makeHarness({ getter = true } = {}) {
       },
     },
     storageDomain: undefined,
+    tools: tools
+      ? {
+          register(tool) {
+            registeredTools.set(tool.name, tool)
+            return () => registeredTools.delete(tool.name)
+          },
+        }
+      : undefined,
   }
 
   if (getter) {
@@ -140,8 +188,21 @@ function makeHarness({ getter = true } = {}) {
     })
   }
 
-  apply(ctx)
-  return { ctx, routes, listeners, archived, entries }
+  apply(ctx, config ?? {})
+  return { ctx, routes, listeners, archived, entries, registeredTools, archiveCalls }
+}
+
+async function withHome(run) {
+  const previous = process.env.DSH_HOME
+  const home = await mkdtemp(join(tmpdir(), 'dkam-host-'))
+  process.env.DSH_HOME = home
+  try {
+    return await run(home)
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previous
+    await rm(home, { recursive: true, force: true })
+  }
 }
 
 async function post(routes, name, body, overrides = {}) {
@@ -159,9 +220,22 @@ async function post(routes, name, body, overrides = {}) {
   return route(request)
 }
 
-test('registers five POST routes', () => {
+test('registers every POST route', () => {
   const { routes } = makeHarness()
-  for (const name of ['list', 'preview', 'entry', 'unarchive', 'unarchive-many']) {
+  for (const name of [
+    'list',
+    'preview',
+    'entry',
+    'unarchive',
+    'unarchive-many',
+    'transcript',
+    'candidates',
+    'archive-many',
+    'views',
+    'view-save',
+    'view-delete',
+    'notice',
+  ]) {
     assert.ok(routes.has(`${ROUTE_BASE}/${name}`), name)
   }
 })
@@ -299,4 +373,172 @@ test('rejects cross-origin, wrong content type, and oversized batches', async ()
     sessionIds: Array.from({ length: 201 }, (_, index) => `session-${index}`),
   })
   assert.equal(tooMany.status, 400)
+})
+
+test('transcript returns bounded pages without unarchiving', async () => {
+  const { routes, archived } = makeHarness()
+  const response = await post(routes, 'transcript', { sessionId: SESSION_ID, offset: 1, limit: 2 })
+  assert.equal(response.status, 200)
+  const body = await response.json()
+  assert.equal(body.ok, true)
+  assert.equal(body.transcript.total, 5)
+  assert.equal(body.transcript.items.length, 2)
+  assert.equal(body.transcript.items[0].index, 1)
+  assert.equal(body.transcript.items[0].type, 'step/start')
+  assert.equal(body.transcript.hasMore, true)
+  assert.equal(body.transcript.nextOffset, 3)
+  assert.equal(archived.has(SESSION_ID), true)
+
+  const missing = await post(routes, 'transcript', { sessionId: ACTIVE_ID })
+  assert.equal(missing.status, 409)
+  assert.equal((await missing.json()).reason, 'not-archived')
+})
+
+test('candidates mark active sessions and list archived ones separately', async () => {
+  const { routes } = makeHarness()
+  const response = await post(routes, 'candidates', {})
+  assert.equal(response.status, 200)
+  const body = await response.json()
+  assert.equal(body.ok, true)
+  assert.equal(body.openCount, 1)
+  assert.equal(body.archivedCount, 2)
+  const active = body.items.find(item => item.sessionId === ACTIVE_ID)
+  assert.equal(active.archived, false)
+  assert.equal(active.active, true)
+  assert.equal(active.activity[0].kind, 'turn')
+  const archived = body.items.find(item => item.sessionId === SESSION_ID)
+  assert.equal(archived.archived, true)
+  assert.equal(archived.active, false)
+})
+
+test('archive-many refuses to stop an active session without explicit confirmation', async () => {
+  await withHome(async () => {
+    const { routes, archived, archiveCalls } = makeHarness()
+    const active = await post(routes, 'archive-many', { sessionIds: [ACTIVE_ID] })
+    assert.equal(active.status, 200)
+    const activeBody = await active.json()
+    assert.equal(activeBody.ok, false)
+    assert.equal(activeBody.failed[0].reason, 'active')
+    assert.equal(activeBody.failed[0].activity[0].kind, 'turn')
+    assert.equal(archived.has(ACTIVE_ID), false)
+
+    const unconfirmed = await post(routes, 'archive-many', {
+      sessionIds: [ACTIVE_ID],
+      stopActivity: true,
+    })
+    assert.equal(unconfirmed.status, 400)
+    assert.equal((await unconfirmed.json()).reason, 'confirmation-required')
+
+    const confirmed = await post(routes, 'archive-many', {
+      sessionIds: [ACTIVE_ID],
+      stopActivity: true,
+      confirmStop: true,
+    })
+    assert.equal(confirmed.status, 200)
+    const confirmedBody = await confirmed.json()
+    assert.deepEqual(confirmedBody.archived, [ACTIVE_ID])
+    assert.equal(archived.has(ACTIVE_ID), true)
+    assert.deepEqual(archiveCalls.at(-1), { id: ACTIVE_ID, options: { stopActivity: true } })
+
+    const listed = await post(routes, 'list', {})
+    const item = (await listed.json()).items.find(entry => entry.sessionId === ACTIVE_ID)
+    assert.equal(item.history.at(-1).action, 'archived')
+    assert.equal(item.history.at(-1).source, 'user')
+  })
+})
+
+test('saved views round-trip with filters and can be deleted', async () => {
+  await withHome(async () => {
+    const { routes } = makeHarness()
+    const saved = await post(routes, 'view-save', {
+      name: '  Design review  ',
+      query: 'alpha',
+      filter: 'tagged',
+      sort: 'size-desc',
+      tag: 'design',
+    })
+    assert.equal(saved.status, 200)
+    const view = (await saved.json()).view
+    assert.equal(view.name, 'Design review')
+    assert.equal(view.filter, 'tagged')
+    assert.equal(typeof view.id, 'string')
+
+    const listed = await post(routes, 'views', {})
+    assert.equal((await listed.json()).views.length, 1)
+
+    const updated = await post(routes, 'view-save', {
+      id: view.id,
+      name: 'Renamed',
+      query: 'beta',
+      filter: 'noted',
+      sort: 'title',
+      tag: '',
+    })
+    assert.equal(updated.status, 200)
+    const updatedView = (await updated.json()).view
+    assert.equal(updatedView.id, view.id)
+    assert.equal(updatedView.name, 'Renamed')
+    assert.equal(updatedView.query, 'beta')
+
+    const invalid = await post(routes, 'view-save', { name: '   ' })
+    assert.equal(invalid.status, 400)
+
+    const deleted = await post(routes, 'view-delete', { id: view.id })
+    assert.equal(deleted.status, 200)
+    assert.equal((await deleted.json()).deleted, true)
+    const empty = await post(routes, 'views', {})
+    assert.equal((await empty.json()).views.length, 0)
+  })
+})
+
+test('notice returns the recorded archive timestamp', async () => {
+  await withHome(async () => {
+    const { routes, listeners } = makeHarness()
+    assert.equal(typeof listeners.get('workspace/session-archived'), 'function')
+    listeners.get('workspace/session-archived')({ sessionId: SESSION_ID })
+    await new Promise(resolve => setTimeout(resolve, 40))
+
+    const response = await post(routes, 'notice', { sessionId: SESSION_ID })
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.ok, true)
+    assert.equal(typeof body.archivedAt, 'number')
+    assert.ok(body.archivedAt > 0)
+  })
+})
+
+test('agent tools stay off by default and expose bounded metadata when enabled', async () => {
+  await withHome(async () => {
+    const disabled = makeHarness({ tools: true })
+    assert.equal(disabled.registeredTools.size, 0)
+
+    const enabled = makeHarness({ tools: true, config: { tools: true } })
+    assert.deepEqual([...enabled.registeredTools.keys()].sort(), [
+      'archive_list',
+      'archive_read',
+      'archive_search',
+    ])
+    const list = await enabled.registeredTools.get('archive_list').execute({ limit: 10 })
+    assert.equal(list.count, 2)
+    assert.equal('firstUserText' in list.items[0], false)
+    assert.equal('events' in list.items[0], false)
+
+    const search = await enabled.registeredTools.get('archive_search').execute({ query: 'Archived' })
+    assert.equal(search.count, 1)
+    assert.equal(search.items[0].sessionId, SESSION_ID)
+
+    const read = await enabled.registeredTools.get('archive_read').execute({
+      sessionId: SESSION_ID,
+      offset: 1,
+      limit: 2,
+    })
+    assert.equal(read.eventCount, 5)
+    assert.equal(read.items.length, 2)
+    assert.equal(read.items[0].index, 1)
+    assert.equal(read.nextOffset, 3)
+    await assert.rejects(
+      enabled.registeredTools.get('archive_read').execute({ sessionId: ACTIVE_ID }),
+      /not archived/,
+    )
+  })
 })

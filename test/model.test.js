@@ -13,12 +13,15 @@ import {
   mergeEntryPatch,
   messageText,
   normalizeEntry,
+  normalizeHistory,
   normalizeNote,
   normalizeTags,
+  normalizeView,
   summarizeEvents,
   summarizeList,
+  transcriptPage,
 } from '../src/model.js'
-import { DOMAIN_NAME, openStore } from '../src/store.js'
+import { DOMAIN_NAME, VIEW_DOMAIN_NAME, openStore } from '../src/store.js'
 
 test('normalizeNote trims, caps, and rejects empty values', () => {
   assert.equal(normalizeNote('  hello  '), 'hello')
@@ -155,6 +158,99 @@ test('summarizeList reports known and unknown capacity', () => {
   assert.equal(summary.latestArchivedAt, 10)
 })
 
+test('normalizeHistory sorts, dedupes, and drops invalid events', () => {
+  const history = normalizeHistory([
+    { at: 20, action: 'restored', source: 'user' },
+    { at: 10, action: 'archived', source: 'plugin' },
+    { at: 10, action: 'archived', source: 'plugin' },
+    { at: 30, action: 'unknown' },
+    { at: 'bad', action: 'archived' },
+  ])
+  assert.deepEqual(history, [
+    { at: 10, action: 'archived', source: 'plugin' },
+    { at: 20, action: 'restored', source: 'user' },
+  ])
+})
+
+test('normalizeHistory keeps the newest events when the cap is exceeded', () => {
+  const history = normalizeHistory(Array.from({ length: 60 }, (_, index) => ({
+    at: 1_000 + index,
+    action: index % 2 === 0 ? 'archived' : 'restored',
+    source: 'plugin',
+  })))
+  assert.equal(history.length, 50)
+  assert.equal(history[0].at, 1_010)
+  assert.equal(history.at(-1).at, 1_059)
+})
+
+test('entry history records archive and restore, including re-archive', () => {
+  const first = entryForArchive('s1', undefined, 100, 'user')
+  assert.deepEqual(first.history, [{ at: 100, action: 'archived', source: 'user' }])
+  const restored = entryForRestore('s1', first, 200, 'user')
+  assert.deepEqual(restored.history.map(event => event.action), ['archived', 'restored'])
+  const rearchived = entryForArchive('s1', restored, 300)
+  assert.equal(rearchived.archivedAt, 300)
+  assert.deepEqual(rearchived.history.map(event => event.action), ['archived', 'restored', 'archived'])
+})
+
+test('normalizeEntry rebuilds the audit trail for legacy records', () => {
+  const entry = normalizeEntry('s1', { archivedAt: 10, restoredAt: 20 })
+  assert.deepEqual(entry.history, [
+    { at: 10, action: 'archived', source: 'plugin' },
+    { at: 20, action: 'restored', source: 'plugin' },
+  ])
+})
+
+test('transcriptPage returns bounded rows and pagination facts', () => {
+  const events = [
+    { type: 'user/message', time: 1, data: { content: [{ type: 'text', text: 'hello' }] } },
+    { type: 'assistant/message', time: 2, data: { message: { content: [{ type: 'text', text: 'hi' }] } } },
+    { type: 'tool/call', time: 3, data: { name: 'read', arguments: { path: 'a' } } },
+    { type: 'system/message', time: 4, data: { message: { content: [{ type: 'text', text: 'note' }] } } },
+  ]
+  const page = transcriptPage(events, { offset: 1, limit: 2 })
+  assert.equal(page.total, 4)
+  assert.equal(page.items.length, 2)
+  assert.equal(page.items[0].index, 1)
+  assert.equal(page.items[0].role, 'assistant')
+  assert.equal(page.items[0].text, 'hi')
+  assert.equal(page.items[1].role, 'tool')
+  assert.equal(page.items[1].name, 'read')
+  assert.equal(page.hasMore, true)
+  assert.equal(page.nextOffset, 3)
+
+  const tail = transcriptPage(events, { offset: 3, limit: 2 })
+  assert.equal(tail.items.length, 1)
+  assert.equal(tail.hasMore, false)
+  assert.equal(tail.nextOffset, null)
+
+  const bounded = transcriptPage([{ type: 'user/message', data: { content: [{ type: 'text', text: 'x'.repeat(5000) }] } }], { limit: 500 })
+  assert.equal(bounded.limit, 100)
+  assert.equal(bounded.items[0].truncated, true)
+  assert.ok(bounded.items[0].text.length <= 1201)
+})
+
+test('normalizeView validates names and view fields', () => {
+  const view = normalizeView('view-1', {
+    name: '  Focus  ',
+    query: '  alpha ',
+    filter: 'tagged',
+    sort: 'size-desc',
+    tag: ' design ',
+    createdAt: 10,
+    updatedAt: 20,
+  })
+  assert.equal(view.name, 'Focus')
+  assert.equal(view.query, 'alpha')
+  assert.equal(view.filter, 'tagged')
+  assert.equal(view.sort, 'size-desc')
+  assert.equal(view.tag, 'design')
+  assert.equal(normalizeView('', { name: 'x' }), undefined)
+  assert.equal(normalizeView('v', { name: '   ' }), undefined)
+  assert.equal(normalizeView('v', { name: 'x', filter: 'bogus', sort: 'bogus' }).filter, 'all')
+  assert.equal(normalizeView('v', { name: 'x', filter: 'bogus', sort: 'bogus' }).sort, 'archived-desc')
+})
+
 test('formatBytes uses readable units', () => {
   assert.equal(formatBytes(500), '500 B')
   assert.equal(formatBytes(1536), '1.5 KB')
@@ -171,15 +267,21 @@ test('JSON fallback store round-trips metadata', async () => {
     const store = await openStore(ctx)
     assert.equal(store.kind, 'json')
     await store.put('s1', { sessionId: 's1', note: 'hello', tags: ['x'], inferred: true })
+    await store.putView({ id: 'v1', name: 'Focus', query: 'alpha', filter: 'tagged', sort: 'title', tag: 'design', createdAt: 10, updatedAt: 20 })
     assert.equal(store.get('s1').note, 'hello')
     assert.equal(store.get('s1').archivedAt, undefined)
+    assert.equal(store.getView('v1').name, 'Focus')
     await store.close()
 
     const reopened = await openStore(ctx)
     assert.equal(reopened.get('s1').note, 'hello')
     assert.deepEqual(reopened.get('s1').tags, ['x'])
+    assert.equal(reopened.getView('v1').filter, 'tagged')
+    assert.equal(reopened.views().length, 1)
     await reopened.close()
-    assert.equal(JSON.parse(await readFile(join(home, 'archive-manager', 'entries.json'), 'utf8')).version, 1)
+    const raw = JSON.parse(await readFile(join(home, 'archive-manager', 'entries.json'), 'utf8'))
+    assert.equal(raw.version, 2)
+    assert.ok(Array.isArray(raw.views))
   } finally {
     if (previous === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = previous
@@ -187,6 +289,7 @@ test('JSON fallback store round-trips metadata', async () => {
   }
 })
 
-test('domain name is valid for the DSH domain facility', () => {
+test('domain names are valid for the DSH domain facility', () => {
   assert.match(DOMAIN_NAME, /^[a-z][a-z0-9_]*$/)
+  assert.match(VIEW_DOMAIN_NAME, /^[a-z][a-z0-9_]*$/)
 })

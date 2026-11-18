@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Archive Manager",
-    "description": "Browse, annotate, preview, restore, and export archived sessions."
+    "description": "Browse, annotate, preview, restore, and export archived sessions, with saved views, an audit trail, transcripts, and batch archiving."
   }
 }

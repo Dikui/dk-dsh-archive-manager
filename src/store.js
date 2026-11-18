@@ -14,12 +14,16 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-import { normalizeEntry } from './model.js'
+import { normalizeEntry, normalizeView } from './model.js'
 
 /** Domain name declared by this plugin. DSH domain names use snake_case. */
 export const DOMAIN_NAME = 'archive_manager'
 /** Single table holding one metadata record per archived session. */
 export const TABLE_NAME = 'entries'
+/** Separate domain for saved views; keeping it v1 avoids an entries migration. */
+export const VIEW_DOMAIN_NAME = 'archive_manager_views'
+/** Table holding saved views. */
+export const VIEW_TABLE_NAME = 'views'
 
 /**
  * Minimal schema adapter for `domainTable`.
@@ -38,6 +42,27 @@ const entrySchema = {
       throw new Error('archive entry must carry a sessionId')
     }
     return normalizeEntry(value.sessionId, value)
+  },
+  safeParse(value) {
+    try {
+      return { success: true, data: this.parse(value) }
+    } catch (error) {
+      return { success: false, error }
+    }
+  },
+}
+
+const viewSchema = {
+  parse(value) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error('archive view must be an object')
+    }
+    if (typeof value.id !== 'string' || value.id.length === 0) {
+      throw new Error('archive view must carry an id')
+    }
+    const view = normalizeView(value.id, value)
+    if (view === undefined) throw new Error('archive view must carry a name')
+    return view
   },
   safeParse(value) {
     try {
@@ -81,6 +106,31 @@ export async function openStore(ctx) {
     }
 
     const table = domain.table(TABLE_NAME)
+    let viewDomain
+    let viewOwned = true
+    let viewTable
+    try {
+      const viewSpec = defineDomain({
+        name: VIEW_DOMAIN_NAME,
+        version: 1,
+        tables: { [VIEW_TABLE_NAME]: domainTable(viewSchema) },
+      })
+      try {
+        viewDomain = await ctx.storageDomain.open(viewSpec)
+      } catch (error) {
+        if (error?.code === 'already-open' && typeof ctx.storageDomain.get === 'function') {
+          viewDomain = ctx.storageDomain.get(VIEW_DOMAIN_NAME)
+          viewOwned = false
+        }
+        if (viewDomain === undefined) throw error
+      }
+      viewTable = viewDomain.table(VIEW_TABLE_NAME)
+    } catch (error) {
+      ctx.logger?.warn?.('dk-dsh-archive-manager: saved-view store unavailable: %o', error)
+      viewDomain = undefined
+      viewOwned = false
+    }
+
     return {
       kind: 'domain',
       get: sessionId => {
@@ -100,8 +150,34 @@ export async function openStore(ctx) {
       async delete(sessionId) {
         return table.delete(sessionId)
       },
+      getView: id => {
+        if (viewTable === undefined) return undefined
+        const value = viewTable.get(id)
+        return value === undefined ? undefined : normalizeView(id, value)
+      },
+      views: () => {
+        if (viewTable === undefined) return []
+        const out = []
+        for (const [id, value] of viewTable.entries()) {
+          const view = normalizeView(id, value)
+          if (view !== undefined) out.push(view)
+        }
+        return out
+      },
+      async putView(value) {
+        if (viewTable === undefined) throw new Error('saved-view store is unavailable')
+        const view = normalizeView(value?.id, value)
+        if (view === undefined) throw new Error('invalid archive view')
+        await viewTable.put(view.id, view)
+        return view
+      },
+      async deleteView(id) {
+        if (viewTable === undefined) return false
+        return viewTable.delete(id)
+      },
       async close() {
         if (owned) await domain.close()
+        if (viewOwned && viewDomain !== undefined) await viewDomain.close()
       },
     }
   } catch (error) {
@@ -121,6 +197,7 @@ async function openFileStore(ctx) {
   const home = process.env.DSH_HOME ?? join(homedir(), '.dsh')
   const path = join(home, 'archive-manager', 'entries.json')
   const records = new Map()
+  const savedViews = new Map()
 
   try {
     const raw = await readFile(path, 'utf8')
@@ -133,6 +210,12 @@ async function openFileStore(ctx) {
         if (typeof sessionId === 'string' && sessionId.length > 0) {
           records.set(sessionId, normalizeEntry(sessionId, value))
         }
+      }
+    }
+    if (Array.isArray(parsed?.views)) {
+      for (const value of parsed.views) {
+        const view = normalizeView(value?.id, value)
+        if (view !== undefined) savedViews.set(view.id, view)
       }
     }
   } catch (error) {
@@ -152,8 +235,9 @@ async function openFileStore(ctx) {
   }
   const persist = () => enqueue(async () => {
     const snapshot = JSON.stringify({
-      version: 1,
+      version: 2,
       entries: Object.fromEntries(records),
+      views: [...savedViews.values()],
     }, null, 2)
     await mkdir(dirname(path), { recursive: true })
     const temporary = `${path}.${process.pid}.tmp`
@@ -173,6 +257,20 @@ async function openFileStore(ctx) {
     },
     async delete(sessionId) {
       const existed = records.delete(sessionId)
+      if (existed) await persist()
+      return existed
+    },
+    getView: id => savedViews.get(id),
+    views: () => [...savedViews.values()],
+    async putView(value) {
+      const view = normalizeView(value?.id, value)
+      if (view === undefined) throw new Error('invalid archive view')
+      savedViews.set(view.id, view)
+      await persist()
+      return view
+    },
+    async deleteView(id) {
+      const existed = savedViews.delete(id)
       if (existed) await persist()
       return existed
     },

@@ -112,6 +112,55 @@ window.__ModuleLoader__.load({
         reasonUnarchiveFailed: 'Could not restore the session',
         reasonSaveFailed: 'Could not save the note',
         reasonMethodNotAllowed: 'The request was rejected',
+        views: 'Views',
+        allViews: 'All views',
+        saveView: 'Save view',
+        deleteView: 'Delete view',
+        viewName: 'View name',
+        viewNamePlaceholder: 'e.g. Client reviews',
+        viewSaved: 'View saved',
+        viewDeleted: 'View deleted',
+        viewSaveFailed: 'Could not save the view',
+        viewDeleteFailed: 'Could not delete the view',
+        batchArchive: 'Batch archive',
+        batchTitle: 'Archive sessions',
+        batchDesc: 'Select sessions to archive. Active sessions list their work and need explicit confirmation before anything is stopped.',
+        candidateLoading: 'Loading sessions…',
+        candidateEmpty: 'No sessions are available to archive',
+        candidateArchived: 'Archived',
+        candidateActive: 'Active',
+        candidateActiveHint: 'This session is doing work',
+        candidateIdle: 'Idle',
+        archiveSelected: 'Archive selected',
+        stopAndArchive: 'Stop activity and archive',
+        confirmStop: 'I understand this stops the listed activity and archives the session.',
+        activity: 'Activity',
+        batchFailed: 'Some sessions could not be archived',
+        batchArchived: 'Archived',
+        notFound: 'Session not found',
+        archiveNoticeHint: 'Archived. Open Archive Manager to see the archive time, note, and tags.',
+        restoreOpenHint: 'Restored. Open it from the session list.',
+        transcript: 'Full transcript',
+        loadTranscript: 'Load transcript',
+        transcriptLoading: 'Loading transcript…',
+        transcriptFailed: 'Could not load the transcript',
+        transcriptEmpty: 'No visible events',
+        prevPage: 'Previous',
+        nextPage: 'Next',
+        pageInfo: 'Page',
+        of: 'of',
+        truncated: 'truncated',
+        audit: 'History',
+        auditArchived: 'Archived',
+        auditRestored: 'Restored',
+        auditSourceUser: 'by you',
+        auditSourcePlugin: 'observed',
+        auditSourceSystem: 'system',
+        restoredAt: 'Restored',
+        notRestored: 'Not restored',
+        reasonConfirmationRequired: 'Confirmation is required',
+        reasonTooManyViews: 'Too many saved views',
+        reasonArchiveFailed: 'Could not archive the session',
       },
       zh: {
         title: '归档管理',
@@ -201,6 +250,55 @@ window.__ModuleLoader__.load({
         reasonUnarchiveFailed: '恢复失败',
         reasonSaveFailed: '保存失败',
         reasonMethodNotAllowed: '请求被拒绝',
+        views: '视图',
+        allViews: '全部视图',
+        saveView: '保存视图',
+        deleteView: '删除视图',
+        viewName: '视图名称',
+        viewNamePlaceholder: '例如：客户复盘',
+        viewSaved: '视图已保存',
+        viewDeleted: '视图已删除',
+        viewSaveFailed: '视图保存失败',
+        viewDeleteFailed: '视图删除失败',
+        batchArchive: '批量归档',
+        batchTitle: '归档会话',
+        batchDesc: '选择要归档的会话。活跃会话会列出正在进行的活动，必须显式确认后才会停止。',
+        candidateLoading: '正在加载会话…',
+        candidateEmpty: '没有可归档的会话',
+        candidateArchived: '已归档',
+        candidateActive: '活动中',
+        candidateActiveHint: '该会话正在执行任务',
+        candidateIdle: '空闲',
+        archiveSelected: '归档所选',
+        stopAndArchive: '停止活动并归档',
+        confirmStop: '我确认停止下列活动并归档该会话。',
+        activity: '活动',
+        batchFailed: '部分会话归档失败',
+        batchArchived: '已归档',
+        notFound: '找不到会话',
+        archiveNoticeHint: '已归档。打开“归档管理”可查看归档时间、备注和标签。',
+        restoreOpenHint: '已恢复，请在会话列表打开。',
+        transcript: '完整转录',
+        loadTranscript: '加载转录',
+        transcriptLoading: '正在加载转录…',
+        transcriptFailed: '转录加载失败',
+        transcriptEmpty: '没有可显示的事件',
+        prevPage: '上一页',
+        nextPage: '下一页',
+        pageInfo: '第',
+        of: '/',
+        truncated: '已截断',
+        audit: '操作历史',
+        auditArchived: '归档',
+        auditRestored: '恢复',
+        auditSourceUser: '由你操作',
+        auditSourcePlugin: '自动记录',
+        auditSourceSystem: '系统',
+        restoredAt: '恢复于',
+        notRestored: '未恢复',
+        reasonConfirmationRequired: '需要确认停止活动',
+        reasonTooManyViews: '保存的视图过多',
+        reasonArchiveFailed: '归档会话失败',
       },
     }
 
@@ -299,6 +397,37 @@ window.__ModuleLoader__.load({
 @keyframes dkam-spin{to{transform:rotate(360deg)}}
 @media (max-width:860px){.dkam-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.dkam-row{grid-template-columns:22px minmax(0,1fr)}.dkam-row-meta{grid-column:2;flex-direction:row;align-items:center;gap:10px}.dkam-row-actions{grid-column:2;justify-content:flex-start}.dkam-toolbar-actions{margin-left:0}.dkam-head{padding:18px 18px 12px}.dkam-scroll{padding:12px 18px 32px}}
 @media (max-width:560px){.dkam-search{max-width:none;flex-basis:100%}.dkam-select{flex:1 1 0;max-width:none}.dkam-dialog{width:calc(100vw - 20px);max-height:92vh}.dkam-dialog-head,.dkam-dialog-body,.dkam-dialog-foot{padding-left:16px;padding-right:16px}.dkam-meta-grid{grid-template-columns:1fr}}
+.dkam-viewbar{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:10px}
+.dkam-viewbar .dkam-select{max-width:220px}
+.dkam-view-editor{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px}
+.dkam-view-editor input{height:32px;min-width:180px;padding:0 10px;border:1px solid var(--dkam-border);border-radius:8px;background:var(--dkam-layer-2);color:var(--dkam-text);font:inherit;font-size:12.5px;outline:none}
+.dkam-candidate-list{display:flex;flex-direction:column;gap:6px;max-height:48vh;overflow:auto;padding-right:2px}
+.dkam-candidate-row{display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--dkam-border);border-radius:9px;background:var(--dkam-layer-2)}
+.dkam-candidate-row[data-archived='true']{opacity:.62}
+.dkam-candidate-main{min-width:0}
+.dkam-candidate-title{display:flex;align-items:center;gap:6px;min-width:0;font-size:13px;font-weight:600}
+.dkam-candidate-title span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dkam-candidate-sub{margin-top:2px;color:var(--dkam-muted);font-size:11.5px}
+.dkam-candidate-activity{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.dkam-activity-chip{display:inline-flex;align-items:center;padding:1px 7px;border-radius:999px;background:var(--dsw-alias-state-warn-soft,rgba(210,153,34,.14));color:var(--dsw-alias-state-warn-primary,#9a6700);font-size:10.5px}
+.dkam-warn-box{padding:10px 12px;border:1px solid var(--dsw-alias-state-warn-primary,#9a6700);border-radius:9px;background:var(--dsw-alias-state-warn-soft,rgba(210,153,34,.1))}
+.dkam-warn-box h3{margin:0 0 4px;font-size:12.5px;color:var(--dkam-text)}
+.dkam-warn-box p{margin:0;color:var(--dkam-muted);font-size:12px}
+.dkam-warn-box ul{margin:6px 0 0;padding-left:18px;color:var(--dkam-muted);font-size:12px}
+.dkam-transcript{display:flex;flex-direction:column;gap:6px;max-height:340px;overflow:auto;padding:2px}
+.dkam-event{display:grid;grid-template-columns:112px minmax(0,1fr);gap:9px;padding:7px 9px;border:1px solid var(--dkam-border);border-radius:7px;background:var(--dkam-layer-2)}
+.dkam-event-head{display:flex;flex-direction:column;gap:2px;color:var(--dkam-faint);font-size:10.5px;line-height:1.3}
+.dkam-event-role{color:var(--dkam-muted);font-size:11px;font-weight:600}
+.dkam-event-text{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;font-size:12px;line-height:1.45;max-height:150px;overflow:auto}
+.dkam-pager{display:flex;align-items:center;gap:8px;justify-content:flex-end;margin-top:6px}
+.dkam-pager span{color:var(--dkam-faint);font-size:11.5px}
+.dkam-timeline{display:flex;flex-direction:column;gap:0;margin:0;padding:0;list-style:none}
+.dkam-timeline li{position:relative;display:flex;gap:10px;padding:0 0 12px 16px;border-left:1px solid var(--dkam-border)}
+.dkam-timeline li:last-child{padding-bottom:0;border-left-color:transparent}
+.dkam-timeline li::before{content:'';position:absolute;left:-4px;top:3px;width:7px;height:7px;border-radius:50%;background:var(--dkam-brand)}
+.dkam-timeline time{display:block;color:var(--dkam-faint);font-size:11px}
+.dkam-timeline strong{display:block;font-size:12.5px;font-weight:600}
+.dkam-timeline small{color:var(--dkam-muted);font-size:11px}
 `
 
     /** Inject the panel stylesheet once. */
@@ -433,7 +562,20 @@ window.__ModuleLoader__.load({
       const [saving, setSaving] = useState(false)
       const [busy, setBusy] = useState('')
       const [notice, setNotice] = useState('')
+      const [views, setViews] = useState([])
+      const [viewId, setViewId] = useState('')
+      const [viewEditorOpen, setViewEditorOpen] = useState(false)
+      const [viewName, setViewName] = useState('')
+      const [viewBusy, setViewBusy] = useState(false)
+      const [candidatesOpen, setCandidatesOpen] = useState(false)
+      const [candidates, setCandidates] = useState(null)
+      const [candidateSelected, setCandidateSelected] = useState(() => new Set())
+      const [candidateBusy, setCandidateBusy] = useState(false)
+      const [candidateFailures, setCandidateFailures] = useState([])
+      const [confirmStop, setConfirmStop] = useState(false)
+      const [transcript, setTranscript] = useState(null)
       const dialogRef = useRef(null)
+      const candidateDialogRef = useRef(null)
       const noticeTimer = useRef(null)
 
       const reasonText = useCallback((reason) => {
@@ -448,6 +590,9 @@ window.__ModuleLoader__.load({
           'unarchive-failed': 'reasonUnarchiveFailed',
           'save-failed': 'reasonSaveFailed',
           'method-not-allowed': 'reasonMethodNotAllowed',
+          'confirmation-required': 'reasonConfirmationRequired',
+          'too-many-views': 'reasonTooManyViews',
+          'archive-failed': 'reasonArchiveFailed',
         }
         return tr(map[reason] ?? 'requestFailed')
       }, [tr])
@@ -526,6 +671,29 @@ window.__ModuleLoader__.load({
         return () => clearTimeout(noticeTimer.current)
       }, [notice])
 
+      const refreshViews = useCallback(async () => {
+        const data = await post('views', {})
+        setViews(Array.isArray(data.views) ? data.views : [])
+      }, [post])
+
+      useEffect(() => {
+        refreshViews().catch(() => {})
+      }, [refreshViews])
+
+      useEffect(() => {
+        const dialog = candidateDialogRef.current
+        if (!dialog) return
+        if (candidatesOpen && !dialog.open) {
+          try {
+            dialog.showModal()
+          } catch {
+            dialog.setAttribute('open', '')
+          }
+        } else if (!candidatesOpen && dialog.open) {
+          dialog.close()
+        }
+      }, [candidatesOpen])
+
       const filtered = useMemo(
         () => filterItems(items, { query, filter, tag, sort }),
         [items, query, filter, tag, sort],
@@ -558,6 +726,7 @@ window.__ModuleLoader__.load({
 
       const openPreview = (item) => {
         setPreview({ item, data: null, loading: true, error: null })
+        setTranscript(null)
         setNoteDraft(item.note ?? '')
         setTagsDraft(Array.isArray(item.tags) ? item.tags.join(', ') : '')
         post('preview', { sessionId: item.sessionId }).then(data => {
@@ -616,7 +785,7 @@ window.__ModuleLoader__.load({
         try {
           const data = await post('unarchive', { sessionId: item.sessionId })
           if (data.ok === false) throw new Error(reasonText(data.reason))
-          setNotice(tr('restoreDone'))
+          setNotice(tr('restoreOpenHint'))
           setPreview(null)
           reload()
         } catch (error) {
@@ -634,7 +803,7 @@ window.__ModuleLoader__.load({
           if (Array.isArray(data.failed) && data.failed.length > 0) {
             setNotice(`${tr('partialRestore')} (${data.failed.length})`)
           } else {
-            setNotice(tr('restoreDone'))
+            setNotice(tr('restoreOpenHint'))
           }
           setSelected(new Set())
           setPreview(null)
@@ -674,6 +843,152 @@ window.__ModuleLoader__.load({
         }
       }
 
+      const loadTranscript = async (offset = 0) => {
+        const sessionId = preview?.item?.sessionId
+        if (!sessionId) return
+        setTranscript({ loading: true, error: null, data: null })
+        try {
+          const result = await post('transcript', { sessionId, offset, limit: 40 })
+          setTranscript({ loading: false, error: null, data: result.transcript })
+        } catch (error) {
+          setTranscript({ loading: false, error: error.message || tr('transcriptFailed'), data: null })
+        }
+      }
+
+      const applyView = (id) => {
+        setViewId(id)
+        const view = views.find(candidate => candidate.id === id)
+        if (!view) {
+          if (id === '') {
+            setQuery('')
+            setFilter('all')
+            setSort('archived-desc')
+            setTag('')
+          }
+          return
+        }
+        setQuery(view.query ?? '')
+        setFilter(view.filter ?? 'all')
+        setSort(view.sort ?? 'archived-desc')
+        setTag(view.tag ?? '')
+      }
+
+      const saveView = async () => {
+        const name = viewName.trim()
+        if (name.length === 0 || viewBusy) return
+        setViewBusy(true)
+        try {
+          const data = await post('view-save', {
+            id: viewId || undefined,
+            name,
+            query,
+            filter,
+            sort,
+            tag,
+          })
+          const saved = data.view
+          if (saved) {
+            setViews(previous => {
+              const rest = previous.filter(view => view.id !== saved.id)
+              return [saved, ...rest]
+            })
+            setViewId(saved.id)
+          }
+          setViewEditorOpen(false)
+          setViewName('')
+          setNotice(tr('viewSaved'))
+        } catch (error) {
+          setNotice(error.message || tr('viewSaveFailed'))
+        } finally {
+          setViewBusy(false)
+        }
+      }
+
+      const deleteView = async () => {
+        if (!viewId || viewBusy) return
+        setViewBusy(true)
+        try {
+          await post('view-delete', { id: viewId })
+          setViews(previous => previous.filter(view => view.id !== viewId))
+          setViewId('')
+          setNotice(tr('viewDeleted'))
+        } catch (error) {
+          setNotice(error.message || tr('viewDeleteFailed'))
+        } finally {
+          setViewBusy(false)
+        }
+      }
+
+      const openCandidates = () => {
+        setCandidatesOpen(true)
+        setCandidates(null)
+        setCandidateSelected(new Set())
+        setCandidateFailures([])
+        setConfirmStop(false)
+        post('candidates', {}).then(data => {
+          setCandidates({ items: Array.isArray(data.items) ? data.items : [] })
+        }).catch(error => {
+          setCandidates({ items: [], error: error.message || tr('loadFailed') })
+        })
+      }
+
+      const toggleCandidate = (sessionId) => {
+        setCandidateSelected(previous => {
+          const next = new Set(previous)
+          if (next.has(sessionId)) next.delete(sessionId)
+          else next.add(sessionId)
+          return next
+        })
+      }
+
+      const archiveCandidates = async (stopActivity) => {
+        if (candidateBusy) return
+        const chosen = (candidates?.items ?? [])
+          .filter(item => !item.archived && candidateSelected.has(item.sessionId))
+          .map(item => item.sessionId)
+        if (chosen.length === 0) return
+        if (stopActivity && !confirmStop) {
+          setNotice(tr('reasonConfirmationRequired'))
+          return
+        }
+        setCandidateBusy(true)
+        try {
+          const body = { sessionIds: chosen }
+          if (stopActivity) {
+            body.stopActivity = true
+            body.confirmStop = true
+          }
+          const data = await post('archive-many', body)
+          const failed = Array.isArray(data.failed) ? data.failed : []
+          const active = failed.filter(item => item.reason === 'active')
+          setCandidateFailures(active)
+          const archived = Array.isArray(data.archived) ? data.archived : []
+          if (archived.length > 0) {
+            setCandidates(previous => previous
+              ? {
+                ...previous,
+                items: previous.items.map(item => archived.includes(item.sessionId)
+                  ? { ...item, archived: true, active: false, activity: [] }
+                  : item),
+              }
+              : previous)
+          }
+          setCandidateSelected(new Set(active.map(failure => failure.sessionId)))
+          if (failed.length === 0) {
+            setCandidatesOpen(false)
+            setConfirmStop(false)
+            setNotice(`${tr('batchArchived')} ${archived.length}`)
+          } else {
+            setNotice(tr('batchFailed'))
+          }
+          reload()
+        } catch (error) {
+          setNotice(error.message || tr('batchFailed'))
+        } finally {
+          setCandidateBusy(false)
+        }
+      }
+
       const data = preview?.data
       const item = preview?.item
       const previewTitle = data?.title || item?.title || tr('unknownTitle')
@@ -682,6 +997,20 @@ window.__ModuleLoader__.load({
       const unknownSizes = summary?.unknownSizeCount ?? 0
       const latestArchived = summary?.latestArchivedAt
       const count = summary?.count ?? items.length
+
+      const candidateItems = candidates?.items ?? []
+      const activityLabels = (activity) => {
+        const out = []
+        for (const group of Array.isArray(activity) ? activity : []) {
+          const items = Array.isArray(group?.items) ? group.items : []
+          if (items.length === 0) {
+            if (group?.kind) out.push(String(group.kind))
+            continue
+          }
+          for (const entry of items) out.push(String(entry?.label ?? entry?.id ?? group.kind ?? ''))
+        }
+        return out.filter(Boolean).slice(0, 8)
+      }
 
       const statCard = (label, value, key) => h('div', { className: 'dkam-stat', key },
         h('strong', { title: typeof value === 'string' ? value : undefined }, value),
@@ -747,6 +1076,11 @@ window.__ModuleLoader__.load({
               h('option', { value: 'title' }, tr('sortTitle')),
             ),
             h('div', { className: 'dkam-toolbar-actions' },
+              h('button', {
+                className: 'dkam-btn',
+                onClick: openCandidates,
+                disabled: Boolean(busy),
+              }, tr('batchArchive')),
               h('label', { className: 'dkam-check' },
                 h('input', { type: 'checkbox', checked: allSelected, onChange: toggleAll }),
                 tr('selectAll'),
@@ -764,6 +1098,45 @@ window.__ModuleLoader__.load({
               }, tr('exportSelected')),
             ),
           ),
+          h('div', { className: 'dkam-viewbar' },
+            h('select', {
+              className: 'dkam-select',
+              value: viewId,
+              'aria-label': tr('views'),
+              onChange: event => applyView(event.target.value),
+            },
+              h('option', { value: '' }, tr('allViews')),
+              views.map(view => h('option', { value: view.id, key: view.id }, view.name)),
+            ),
+            h('button', {
+              className: 'dkam-btn dkam-btn-quiet',
+              onClick: () => { setViewEditorOpen(open => !open); setViewName('') },
+            }, tr('saveView')),
+            viewId ? h('button', {
+              className: 'dkam-btn dkam-btn-quiet',
+              onClick: deleteView,
+              disabled: viewBusy,
+            }, tr('deleteView')) : null,
+          ),
+          viewEditorOpen ? h('div', { className: 'dkam-view-editor' },
+            h('input', {
+              value: viewName,
+              maxLength: 40,
+              placeholder: tr('viewNamePlaceholder'),
+              'aria-label': tr('viewName'),
+              onChange: event => setViewName(event.target.value),
+              onKeyDown: event => { if (event.key === 'Enter') saveView() },
+            }),
+            h('button', {
+              className: 'dkam-btn dkam-btn-primary',
+              onClick: saveView,
+              disabled: viewBusy || viewName.trim().length === 0,
+            }, tr('saveView')),
+            h('button', {
+              className: 'dkam-btn dkam-btn-quiet',
+              onClick: () => { setViewEditorOpen(false); setViewName('') },
+            }, tr('close')),
+          ) : null,
           tag ? h('div', { className: 'dkam-active-filter' },
             h('span', null, `${tr('tags')}: ${tag}`),
             h('button', { type: 'button', onClick: () => setTag('') }, tr('clearTag')),
@@ -903,6 +1276,7 @@ window.__ModuleLoader__.load({
                       metaItem(tr('workspace'), data.workspaceTitle || tr('unfiled')),
                       metaItem(tr('createdAt'), formatTime(data.createdAt)),
                       metaItem(tr('archivedAt'), data.archivedAtKnown ? formatTime(data.archivedAt) : tr('archivedAtUnknown')),
+                      metaItem(tr('restoredAt'), data.restoredAt ? formatTime(data.restoredAt) : tr('notRestored')),
                       metaItem(tr('lastActive'), formatTime(data.lastActivityAt)),
                       metaItem(tr('size'), formatBytes(data.sizeBytes)),
                       metaItem(tr('events'), String(data.eventCount ?? '—')),
@@ -928,6 +1302,69 @@ window.__ModuleLoader__.load({
                             h('b', null, tool.name), `×${tool.count}`))),
                       )
                       : null,
+                    Array.isArray(data.history) && data.history.length > 0
+                      ? h('div', { className: 'dkam-section' },
+                        h('h3', null, tr('audit')),
+                        h('ol', { className: 'dkam-timeline' },
+                          data.history.map((event, index) => h('li', { key: `${event.action}-${event.at}-${index}` },
+                            h('div', null,
+                              h('time', null, formatTime(event.at)),
+                              h('strong', null, event.action === 'archived' ? tr('auditArchived') : tr('auditRestored')),
+                              h('small', null, event.source === 'user'
+                                ? tr('auditSourceUser')
+                                : event.source === 'system'
+                                  ? tr('auditSourceSystem')
+                                  : tr('auditSourcePlugin')),
+                            ),
+                          )),
+                        ),
+                      )
+                      : null,
+                    h('div', { className: 'dkam-section' },
+                      h('h3', null, tr('transcript')),
+                      transcript === null
+                        ? h('button', { className: 'dkam-btn', onClick: () => loadTranscript(0) }, tr('loadTranscript'))
+                        : transcript.loading
+                          ? h('div', { className: 'dkam-empty' },
+                            h('span', { className: 'dkam-spinner' }),
+                            h('p', null, tr('transcriptLoading')),
+                          )
+                          : transcript.error
+                            ? h('div', { className: 'dkam-empty dkam-error' },
+                              h('p', null, transcript.error),
+                              h('button', { className: 'dkam-btn', onClick: () => loadTranscript(0) }, tr('retry')),
+                            )
+                            : transcript.data
+                              ? h(React.Fragment, null,
+                                transcript.data.items.length === 0
+                                  ? h('p', { className: 'dkam-hint' }, tr('transcriptEmpty'))
+                                  : h('div', { className: 'dkam-transcript' },
+                                    transcript.data.items.map(event => h('div', { className: 'dkam-event', key: event.index },
+                                      h('div', { className: 'dkam-event-head' },
+                                        h('span', { className: 'dkam-event-role' }, event.role ?? event.type),
+                                        h('span', null, formatTime(event.time)),
+                                        event.name ? h('span', null, event.name) : null,
+                                      ),
+                                      h('pre', { className: 'dkam-event-text' },
+                                        event.text || tr('noText'),
+                                        event.truncated ? ` · ${tr('truncated')}` : ''),
+                                    ))),
+                                h('div', { className: 'dkam-pager' },
+                                  h('button', {
+                                    className: 'dkam-btn',
+                                    disabled: transcript.data.offset === 0,
+                                    onClick: () => loadTranscript(Math.max(0, transcript.data.offset - transcript.data.limit)),
+                                  }, tr('prevPage')),
+                                  h('span', null, `${tr('pageInfo')} ${Math.floor(transcript.data.offset / transcript.data.limit) + 1} ${tr('of')} ${Math.max(1, Math.ceil(transcript.data.total / transcript.data.limit))}`),
+                                  h('button', {
+                                    className: 'dkam-btn',
+                                    disabled: !transcript.data.hasMore,
+                                    onClick: () => loadTranscript(transcript.data.nextOffset ?? transcript.data.offset + transcript.data.limit),
+                                  }, tr('nextPage')),
+                                ),
+                              )
+                              : null,
+                    ),
                     h('div', { className: 'dkam-editor' },
                       h('label', { className: 'dkam-field' },
                         h('span', null, tr('note')),
@@ -971,6 +1408,113 @@ window.__ModuleLoader__.load({
             }, tr('restore')),
           ),
         ),
+        h('dialog', {
+          ref: candidateDialogRef,
+          className: 'dkam-dialog',
+          onClose: () => setCandidatesOpen(false),
+          'aria-labelledby': 'dkam-candidate-title',
+        },
+          h('div', { className: 'dkam-dialog-head' },
+            h('div', null,
+              h('h2', { className: 'dkam-dialog-title', id: 'dkam-candidate-title' }, tr('batchTitle')),
+              h('p', { className: 'dkam-dialog-sub' }, tr('batchDesc')),
+            ),
+            h('button', {
+              className: 'dkam-x',
+              onClick: () => setCandidatesOpen(false),
+              'aria-label': tr('close'),
+            }, '×'),
+          ),
+          h('div', { className: 'dkam-dialog-body' },
+            candidates === null
+              ? h('div', { className: 'dkam-empty' },
+                h('span', { className: 'dkam-spinner' }),
+                h('p', null, tr('candidateLoading')),
+              )
+              : candidates.error
+                ? h('div', { className: 'dkam-empty dkam-error' }, h('p', null, candidates.error))
+                : candidateItems.length === 0
+                  ? h('div', { className: 'dkam-empty' }, h('p', null, tr('candidateEmpty')))
+                  : h('div', { className: 'dkam-candidate-list' },
+                    candidateItems.map(candidate => h('div', {
+                      className: 'dkam-candidate-row',
+                      key: candidate.sessionId,
+                      'data-archived': candidate.archived ? 'true' : 'false',
+                    },
+                      h('input', {
+                        type: 'checkbox',
+                        checked: candidateSelected.has(candidate.sessionId),
+                        disabled: candidate.archived,
+                        onChange: () => toggleCandidate(candidate.sessionId),
+                        'aria-label': candidate.title || candidate.sessionId,
+                      }),
+                      h('div', { className: 'dkam-candidate-main' },
+                        h('div', { className: 'dkam-candidate-title' },
+                          h('span', null, candidate.title || tr('unknownTitle')),
+                          candidate.archived
+                            ? h('span', { className: 'dkam-pill' }, tr('candidateArchived'))
+                            : candidate.active
+                              ? h('span', { className: 'dkam-pill dkam-pill-warn' }, tr('candidateActive'))
+                              : h('span', { className: 'dkam-pill' }, tr('candidateIdle')),
+                        ),
+                        h('div', { className: 'dkam-candidate-sub' },
+                          candidate.workspaceTitle || tr('unfiled'),
+                          ' · ',
+                          formatTime(candidate.createdAt),
+                        ),
+                        candidate.active ? h('div', { className: 'dkam-candidate-activity' },
+                          activityLabels(candidate.activity).map((label, index) => h('span', {
+                            className: 'dkam-activity-chip',
+                            key: `${candidate.sessionId}-${index}`,
+                          }, label)),
+                        ) : null,
+                      ),
+                      h('div', { className: 'dkam-hint' },
+                        candidate.archived ? tr('candidateArchived') : ''),
+                    )),
+                  ),
+            candidateFailures.length > 0
+              ? h('div', { className: 'dkam-warn-box' },
+                h('h3', null, tr('batchFailed')),
+                h('p', null, tr('candidateActiveHint')),
+                h('ul', null,
+                  candidateFailures.map(failure => h('li', { key: failure.sessionId },
+                    candidateItems.find(candidate => candidate.sessionId === failure.sessionId)?.title
+                      || failure.sessionId,
+                    activityLabels(failure.activity).length > 0
+                      ? ` — ${activityLabels(failure.activity).join(', ')}`
+                      : '',
+                  )),
+                ),
+                h('label', { className: 'dkam-check', style: { marginTop: '8px' } },
+                  h('input', {
+                    type: 'checkbox',
+                    checked: confirmStop,
+                    onChange: event => setConfirmStop(event.target.checked),
+                  }),
+                  tr('confirmStop'),
+                ),
+              )
+              : null,
+          ),
+          h('div', { className: 'dkam-dialog-foot' },
+            h('button', {
+              className: 'dkam-btn dkam-btn-quiet',
+              onClick: () => setCandidatesOpen(false),
+            }, tr('close')),
+            candidateFailures.length > 0
+              ? h('button', {
+                className: 'dkam-btn dkam-btn-primary',
+                onClick: () => archiveCandidates(true),
+                disabled: candidateBusy || !confirmStop || candidateSelected.size === 0,
+              }, tr('stopAndArchive'))
+              : h('button', {
+                className: 'dkam-btn dkam-btn-primary',
+                onClick: () => archiveCandidates(false),
+                disabled: candidateBusy || candidateSelected.size === 0,
+              }, tr('archiveSelected')),
+          ),
+        ),
         notice ? h('div', { className: 'dkam-toast', role: 'status' }, notice) : null,
       )
     }
@@ -999,6 +1543,34 @@ window.__ModuleLoader__.load({
         }
 
         effect(installStyles, 'dk-dsh-archive-manager: styles')
+        if (typeof ctx.on === 'function') {
+          effect(() => ctx.on('workspace/archive-notice', async (sessionId, next) => {
+            let downstream
+            try {
+              downstream = typeof next === 'function' ? await next() : undefined
+            } catch { /* keep the local hint */ }
+            let archivedAt = null
+            try {
+              const response = await fetch(`${BASE}/notice`, {
+                method: 'POST',
+                headers: {
+                  'content-type': 'application/json',
+                  'x-dk-archive-manager': '1',
+                },
+                body: JSON.stringify({ sessionId }),
+              })
+              const data = await response.json()
+              archivedAt = Number.isFinite(data?.archivedAt) ? data.archivedAt : null
+            } catch { /* the notice still works without the timestamp */ }
+            const base = typeof downstream?.text === 'string' && downstream.text.length > 0
+              ? downstream.text
+              : tr('archiveNoticeHint')
+            return {
+              text: archivedAt ? `${base} · ${tr('archivedAt')} ${formatTime(archivedAt)}` : base,
+              tone: downstream?.tone === 'warning' ? 'warning' : 'success',
+            }
+          }), 'dk-dsh-archive-manager: archive notice')
+        }
         effect(() => ctx.slots.inject('main', () => ctx.slots.register({
           name: 'main',
           key: ID,

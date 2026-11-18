@@ -10,6 +10,10 @@
  * - `preview` reads one archived session log through `sessionQuery` without
  *   unarchiving or resuming it.
  * - `entry` saves a note and tags for one archived session.
+ * - `transcript` returns one bounded page of an archived session log.
+ * - `candidates` / `archive-many` implement the confirmed batch archive pool.
+ * - `views` / `view-save` / `view-delete` persist saved filters.
+ * - `notice` supplies the archive timestamp for the built-in toast.
  * - `unarchive` / `unarchive-many` restore sessions through the registry.
  *
  * It never deletes a session, never deletes a workspace, and never stops
@@ -23,11 +27,16 @@ import { stat } from 'node:fs/promises'
 import { basename } from 'node:path'
 
 import {
+  clipText,
   entryForArchive,
   entryForRestore,
   mergeEntryPatch,
+  normalizeView,
   summarizeEvents,
   summarizeList,
+  transcriptPage,
+  VIEWS_MAX,
+  VIEW_NAME_MAX,
 } from './src/model.js'
 import { openStore } from './src/store.js'
 
@@ -37,8 +46,12 @@ export const ROUTE_BASE = '/api/dk-dsh-archive-manager'
 /** Largest request body accepted. Batch restore is the only large payload. */
 const MAX_BODY_BYTES = 256 * 1024
 
-/** Most sessions accepted in one batch restore. */
+/** Most sessions accepted in one batch operation. */
 const MAX_BATCH = 200
+
+/** Most non-archived sessions returned by the candidate pool. */
+const MAX_CANDIDATES = 120
+const MAX_ARCHIVED_CANDIDATES = 40
 
 /** Host services this plugin requires. */
 export const inject = [
@@ -50,17 +63,35 @@ export const inject = [
   'workspaceRegistry',
 ]
 
+/** Default configuration: Agent retrieval stays off unless explicitly enabled. */
+export const Config = {
+  '~standard': {
+    version: 1,
+    vendor: 'dk-dsh-archive-manager',
+    validate(value) {
+      const record = value !== null && typeof value === 'object' ? value : {}
+      if (record.tools !== undefined && typeof record.tools !== 'boolean') {
+        return { issues: [{ message: 'tools must be a boolean', path: ['tools'] }] }
+      }
+      return { value: { tools: record.tools === true } }
+    },
+  },
+}
+
 /**
  * Register the archive-center routes, metadata store, and archive listener.
  * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
  * @returns {void}
  */
-export function apply(ctx) {
+export function apply(ctx, config = {}) {
   const storePromise = openStore(ctx)
   const ready = storePromise.catch(error => {
     ctx.logger?.warn?.('dk-dsh-archive-manager: metadata store failed to open: %o', error)
     throw error
   })
+  const toolsEnabled = config?.tools === true
+  /** Sessions currently being archived by an explicit user action. */
+  const userArchiving = new Set()
 
   ctx.effect(() => () => {
     void ready.then(store => store.close()).catch(error => {
@@ -72,9 +103,10 @@ export function apply(ctx) {
     ctx.effect(() => ctx.on('workspace/session-archived', payload => {
       const sessionId = payload?.sessionId
       if (typeof sessionId !== 'string' || sessionId.length === 0) return
+      if (userArchiving.has(sessionId)) return
       void ready.then(async store => {
         const current = store.get(sessionId)
-        await store.put(sessionId, entryForArchive(sessionId, current, Date.now()))
+        await store.put(sessionId, entryForArchive(sessionId, current, Date.now(), 'plugin'))
       }).catch(error => {
         ctx.logger?.warn?.('dk-dsh-archive-manager: could not record archive time for %s: %o', sessionId, error)
       })
@@ -87,6 +119,13 @@ export function apply(ctx) {
     entry: handleEntry,
     unarchive: handleUnarchive,
     'unarchive-many': handleUnarchiveMany,
+    transcript: handleTranscript,
+    candidates: handleCandidates,
+    'archive-many': (host, store, request) => handleArchiveMany(host, store, request, userArchiving),
+    views: handleViews,
+    'view-save': handleViewSave,
+    'view-delete': handleViewDelete,
+    notice: handleNotice,
   }
   for (const [name, handler] of Object.entries(routes)) {
     ctx.effect(() => ctx.connection.fetch.register({
@@ -96,6 +135,180 @@ export function apply(ctx) {
       fetch: request => handler(ctx, ready, request),
     }), `dk-dsh-archive-manager: ${name} route`)
   }
+
+  if (toolsEnabled) {
+    if (typeof ctx.inject === 'function') {
+      // Wait for the tools service instead of racing plugin load order. The
+      // injected fiber is owned by this one and re-registers on service swaps.
+      ctx.inject(['tools'], inner => registerTools(inner, inner.tools, ready))
+    } else {
+      const tools = typeof ctx.get === 'function' ? ctx.get('tools') : ctx.tools
+      registerTools(ctx, tools, ready)
+    }
+  }
+}
+
+/**
+ * Register the optional tools when the service is present.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @param {object | undefined} tools - Tools service.
+ * @param {Promise<object>} ready - Metadata store.
+ */
+function registerTools(ctx, tools, ready) {
+  if (tools === undefined || tools === null || typeof tools.register !== 'function') return
+  for (const tool of archiveTools(ctx, ready)) {
+    ctx.effect(() => tools.register(tool), `dk-dsh-archive-manager: ${tool.name} tool`)
+  }
+}
+
+/**
+ * Build the optional read-only Agent tools. They are registered only when the
+ * profile explicitly enables `tools`; outputs are bounded and never include a
+ * complete transcript.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @param {Promise<object>} ready - Metadata store.
+ * @returns {object[]} Raw ToolDefinition values.
+ */
+function archiveTools(ctx, ready) {
+  const render = (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }]
+  const output = { schema: { type: 'object', additionalProperties: true }, render }
+
+  const listArchived = async (query, limit) => {
+    const ids = await archivedIds(ctx)
+    if (ids.length === 0) return []
+    const [records, titleResults, workspaces, store] = await Promise.all([
+      ctx.sessionQuery.listSessions(),
+      safeList(() => ctx.sessionQuery.readTitleSnapshots(ids)),
+      safeList(() => ctx.workspaceRegistry.list()),
+      ready,
+    ])
+    const recordById = new Map(records.map(record => [String(record.header.id), record]))
+    const workspaceOf = makeWorkspaceLookup(workspaces, recordById)
+    const needle = typeof query === 'string' ? query.trim().toLocaleLowerCase() : ''
+    const items = []
+    for (const sessionId of ids) {
+      const entry = store.get(sessionId)
+      const header = recordById.get(sessionId)?.header
+      const workspace = workspaceOf(sessionId, header?.cwd)
+      const title = titleOf(titleResults, sessionId)
+      if (needle.length > 0) {
+        const haystack = [sessionId, title, workspace?.title, entry?.note, ...(entry?.tags ?? [])]
+          .filter(Boolean).join('\n').toLocaleLowerCase()
+        if (!haystack.includes(needle)) continue
+      }
+      items.push({
+        sessionId,
+        title,
+        workspace: workspace?.title ?? null,
+        archivedAt: entry?.archivedAt ?? null,
+        note: entry?.note ? clipText(entry.note, 500) : null,
+        tags: entry?.tags ?? [],
+      })
+    }
+    items.sort((a, b) => (b.archivedAt ?? -Infinity) - (a.archivedAt ?? -Infinity))
+    return items.slice(0, limit)
+  }
+
+  return [
+    {
+      name: 'archive_list',
+      description: 'List archived DSH sessions with metadata only. Read-only; does not return transcripts or restore anything. Use archive_read for a bounded transcript page.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Optional case-insensitive filter over title, workspace, note, tag, or id.' },
+          limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Maximum rows (default 20).' },
+        },
+        additionalProperties: false,
+      },
+      output,
+      async execute(args) {
+        const limit = Number.isInteger(args?.limit) ? Math.max(1, Math.min(args.limit, 50)) : 20
+        const items = await listArchived(args?.query, limit)
+        return { count: items.length, items }
+      },
+    },
+    {
+      name: 'archive_search',
+      description: 'Search archived DSH sessions. Read-only; searches indexed events when available and returns short snippets, never full transcripts.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', minLength: 1, description: 'Text to search for in archived sessions.' },
+          limit: { type: 'integer', minimum: 1, maximum: 20, description: 'Maximum rows (default 10).' },
+        },
+        required: ['query'],
+        additionalProperties: false,
+      },
+      output,
+      async execute(args) {
+        const query = typeof args?.query === 'string' ? args.query.trim() : ''
+        if (query.length === 0) throw new Error('query must not be empty')
+        const limit = Number.isInteger(args?.limit) ? Math.max(1, Math.min(args.limit, 20)) : 10
+        const archived = new Set(await archivedIds(ctx))
+        let items = []
+        if (typeof ctx.sessionQuery.searchSessions === 'function') {
+          try {
+            const page = await ctx.sessionQuery.searchSessions({ query, limit })
+            const hits = Array.isArray(page?.items) ? page.items : []
+            items = hits
+              .filter(hit => archived.has(String(hit?.header?.id ?? hit?.sessionId ?? hit?.id)))
+              .slice(0, limit)
+              .map(hit => {
+                const sessionId = String(hit?.header?.id ?? hit?.sessionId ?? hit?.id)
+                const snippet = hit?.bestMatch?.snippet ?? hit?.bestMatch?.text ?? ''
+                return {
+                  sessionId,
+                  title: hit?.displayTitle ?? hit?.title ?? null,
+                  snippet: clipText(typeof snippet === 'string' ? snippet : '', 240),
+                }
+              })
+          } catch (error) {
+            ctx.logger?.warn?.('dk-dsh-archive-manager: archive search fallback: %o', error)
+          }
+        }
+        if (items.length === 0) items = await listArchived(query, limit)
+        return { query, count: items.length, items }
+      },
+    },
+    {
+      name: 'archive_read',
+      description: 'Read one bounded page of text from an archived DSH session. Read-only and limited to 20 events per call; use offset/nextOffset for pagination.',
+      parameters: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', minLength: 1, description: 'Archived session id from archive_list or archive_search.' },
+          offset: { type: 'integer', minimum: 0, description: 'Zero-based event offset (default 0).' },
+          limit: { type: 'integer', minimum: 1, maximum: 20, description: 'Events per page (default 10).' },
+        },
+        required: ['sessionId'],
+        additionalProperties: false,
+      },
+      output,
+      async execute(args) {
+        const sessionId = typeof args?.sessionId === 'string' ? args.sessionId : ''
+        if (sessionId.length === 0) throw new Error('sessionId must not be empty')
+        if (!(await archivedIds(ctx)).includes(sessionId)) throw new Error('session is not archived')
+        const offset = Number.isInteger(args?.offset) ? Math.max(0, args.offset) : 0
+        const limit = Number.isInteger(args?.limit) ? Math.max(1, Math.min(args.limit, 20)) : 10
+        const [log, titleResults] = await Promise.all([
+          ctx.sessionQuery.readSession(sessionId),
+          safeList(() => ctx.sessionQuery.readTitleSnapshots([sessionId])),
+        ])
+        const page = transcriptPage(log.events, { offset, limit })
+        return {
+          sessionId,
+          title: titleOf(titleResults, sessionId),
+          eventCount: page.total,
+          offset: page.offset,
+          limit: page.limit,
+          hasMore: page.hasMore,
+          nextOffset: page.nextOffset,
+          items: page.items,
+        }
+      },
+    },
+  ]
 }
 
 /**
@@ -153,6 +366,8 @@ async function handleList(ctx, storePromise, request) {
         note: entry?.note ?? null,
         tags: entry?.tags ?? [],
         source: entry?.source ?? null,
+        restoredAt: entry?.restoredAt ?? null,
+        history: entry?.history ?? [],
       }
     })
 
@@ -218,6 +433,9 @@ async function handlePreview(ctx, storePromise, request) {
         inferred: entry?.inferred ?? true,
         note: entry?.note ?? null,
         tags: entry?.tags ?? [],
+        source: entry?.source ?? null,
+        restoredAt: entry?.restoredAt ?? null,
+        history: entry?.history ?? [],
         ...summary,
       },
     })
@@ -271,6 +489,8 @@ async function handleEntry(ctx, storePromise, request) {
         inferred: saved.inferred,
         note: saved.note ?? null,
         tags: saved.tags,
+        restoredAt: saved.restoredAt ?? null,
+        history: saved.history ?? [],
       },
     })
   } catch (error) {
@@ -347,6 +567,325 @@ async function handleUnarchiveMany(ctx, storePromise, request) {
     failed,
     archivedSessionIds: await archivedIds(ctx),
   })
+}
+
+/**
+ * Read one bounded page of a session log for the read-only transcript view.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @param {Promise<object>} _storePromise - Metadata store (unused).
+ * @param {Request} request - Incoming request.
+ * @returns {Promise<Response>} JSON page.
+ */
+async function handleTranscript(ctx, _storePromise, request) {
+  const parsed = await readSessionBody(request)
+  if (parsed.response !== undefined) return parsed.response
+  const { sessionId, body } = parsed
+  const offset = Number.isInteger(body.offset) && body.offset >= 0 ? body.offset : 0
+  const limit = Number.isInteger(body.limit) && body.limit > 0 ? Math.min(body.limit, 100) : 40
+
+  try {
+    if (!(await archivedIds(ctx)).includes(sessionId)) {
+      return json({ ok: false, reason: 'not-archived' }, 409)
+    }
+    const [log, titleResults] = await Promise.all([
+      ctx.sessionQuery.readSession(sessionId),
+      safeList(() => ctx.sessionQuery.readTitleSnapshots([sessionId])),
+    ])
+    return json({
+      ok: true,
+      transcript: {
+        sessionId,
+        title: titleOf(titleResults, sessionId),
+        ...transcriptPage(log.events, { offset, limit }),
+      },
+    })
+  } catch (error) {
+    if (error?.code === 'SESSION_QUERY_NOT_FOUND' || error?.name === 'SessionQueryNotFoundError') {
+      return json({ ok: false, reason: 'not-found' }, 404)
+    }
+    ctx.logger?.warn?.('dk-dsh-archive-manager: transcript failed for %s: %o', sessionId, error)
+    return json({ ok: false, reason: 'read-failed' }, 500)
+  }
+}
+
+/**
+ * List sessions for the batch-archive candidate pool. Archived rows are shown
+ * as context; only non-archived rows can be selected in the Client.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @param {Promise<object>} _storePromise - Metadata store (unused).
+ * @param {Request} request - Incoming request.
+ * @returns {Promise<Response>} JSON candidate pool.
+ */
+async function handleCandidates(ctx, _storePromise, request) {
+  const parsed = await readBody(request)
+  if (parsed.response !== undefined) return parsed.response
+
+  try {
+    const [records, archived, workspaces] = await Promise.all([
+      ctx.sessionQuery.listSessions(),
+      archivedIds(ctx),
+      safeList(() => ctx.workspaceRegistry.list()),
+    ])
+    const titleResults = await safeList(() => ctx.sessionQuery.readTitleSnapshots(
+      records.map(record => String(record.header.id)).slice(0, 300),
+    ))
+    const archivedSet = new Set(archived)
+    const workspaceOf = makeWorkspaceLookup(workspaces, new Map(records.map(record => [String(record.header.id), record])))
+    const sorted = [...records].sort((a, b) => (b.header?.createdAt ?? 0) - (a.header?.createdAt ?? 0))
+    const open = sorted.filter(record => !archivedSet.has(String(record.header.id))).slice(0, MAX_CANDIDATES)
+    const activities = await mapLimit(open, 4, record => probeActivity(ctx, String(record.header.id)))
+
+    // Actionable (open) rows come first so a large archive set cannot crowd
+    // out the sessions a batch archive can actually act on.
+    const items = []
+    for (let index = 0; index < open.length; index += 1) {
+      items.push(candidateItem(open[index], false, activities[index], workspaceOf, titleResults))
+    }
+    items.push(...sorted
+      .filter(record => archivedSet.has(String(record.header.id)))
+      .slice(0, MAX_ARCHIVED_CANDIDATES)
+      .map(record => candidateItem(record, true, [], workspaceOf, titleResults)))
+
+    return json({
+      ok: true,
+      items,
+      archivedCount: archivedSet.size,
+      archivedSessionIds: archived,
+      openCount: open.length,
+    })
+  } catch (error) {
+    ctx.logger?.warn?.('dk-dsh-archive-manager: candidate list failed: %o', error)
+    return json({ ok: false, reason: 'list-failed' }, 500)
+  }
+}
+
+/**
+ * Archive several sessions on explicit user request. Active sessions are never
+ * stopped unless the Client sends both `stopActivity` and `confirmStop`; without
+ * them the failure carries the activity details for a confirmation.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @param {Promise<object>} storePromise - Metadata store.
+ * @param {Request} request - Incoming request.
+ * @param {Set<string>} userArchiving - Ids being written by this route.
+ * @returns {Promise<Response>} JSON batch result.
+ */
+async function handleArchiveMany(ctx, storePromise, request, userArchiving) {
+  const parsed = await readBody(request)
+  if (parsed.response !== undefined) return parsed.response
+  const { sessionIds } = parsed.body
+  const stopActivity = parsed.body.stopActivity === true
+  const confirmStop = parsed.body.confirmStop === true
+  if (!Array.isArray(sessionIds) || sessionIds.length === 0 || sessionIds.length > MAX_BATCH
+    || sessionIds.some(id => typeof id !== 'string' || id.length === 0 || id.length > 200)) {
+    return json({ ok: false, reason: 'invalid-request' }, 400)
+  }
+  if (stopActivity && !confirmStop) {
+    return json({ ok: false, reason: 'confirmation-required' }, 400)
+  }
+
+  const unique = [...new Set(sessionIds)]
+  const archivedNow = new Set(await archivedIds(ctx))
+  const archived = []
+  const failed = []
+  for (const sessionId of unique) {
+    if (archivedNow.has(sessionId)) {
+      archived.push(sessionId)
+      continue
+    }
+    userArchiving.add(sessionId)
+    try {
+      await ctx.workspaceRegistry.archiveSession(sessionId, stopActivity ? { stopActivity: true } : undefined)
+      archived.push(sessionId)
+      try {
+        const store = await storePromise
+        await store.put(sessionId, entryForArchive(sessionId, store.get(sessionId), Date.now(), 'user'))
+      } catch (error) {
+        ctx.logger?.warn?.('dk-dsh-archive-manager: could not record batch archive for %s: %o', sessionId, error)
+      }
+    } catch (error) {
+      if (error?.name === 'WorkspaceActiveSessionError') {
+        failed.push({ sessionId, reason: 'active', activity: Array.isArray(error.activity) ? error.activity : [] })
+      } else if (error?.code === 'SESSION_NOT_FOUND' || error?.name === 'SessionNotFoundError') {
+        failed.push({ sessionId, reason: 'not-found' })
+      } else {
+        ctx.logger?.warn?.('dk-dsh-archive-manager: batch archive failed for %s: %o', sessionId, error)
+        failed.push({ sessionId, reason: 'archive-failed' })
+      }
+    } finally {
+      userArchiving.delete(sessionId)
+    }
+  }
+
+  return json({
+    ok: failed.length === 0,
+    archived,
+    failed,
+    archivedSessionIds: await archivedIds(ctx),
+  })
+}
+
+/**
+ * List saved views.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @param {Promise<object>} storePromise - Metadata store.
+ * @param {Request} request - Incoming request.
+ * @returns {Promise<Response>} JSON views.
+ */
+async function handleViews(ctx, storePromise, request) {
+  const parsed = await readBody(request)
+  if (parsed.response !== undefined) return parsed.response
+  try {
+    const store = await storePromise
+    const views = store.views().sort((a, b) => b.updatedAt - a.updatedAt)
+    return json({ ok: true, views })
+  } catch (error) {
+    ctx.logger?.warn?.('dk-dsh-archive-manager: view list failed: %o', error)
+    return json({ ok: false, reason: 'list-failed' }, 500)
+  }
+}
+
+/**
+ * Create or update a saved view.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @param {Promise<object>} storePromise - Metadata store.
+ * @param {Request} request - Incoming request.
+ * @returns {Promise<Response>} JSON saved view.
+ */
+async function handleViewSave(ctx, storePromise, request) {
+  const parsed = await readBody(request)
+  if (parsed.response !== undefined) return parsed.response
+  const body = parsed.body
+  if (typeof body.name !== 'string' || body.name.trim().length === 0) {
+    return json({ ok: false, reason: 'invalid-request' }, 400)
+  }
+  if (body.name.trim().length > VIEW_NAME_MAX) {
+    return json({ ok: false, reason: 'invalid-request' }, 400)
+  }
+
+  try {
+    const store = await storePromise
+    const now = Date.now()
+    const existing = typeof body.id === 'string' ? store.getView(body.id) : undefined
+    if (existing === undefined && store.views().length >= VIEWS_MAX) {
+      return json({ ok: false, reason: 'too-many-views' }, 409)
+    }
+    const id = existing?.id ?? `view-${now.toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+    const view = normalizeView(id, {
+      name: body.name,
+      query: body.query,
+      filter: body.filter,
+      sort: body.sort,
+      tag: body.tag,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    })
+    if (view === undefined) return json({ ok: false, reason: 'invalid-request' }, 400)
+    const saved = await store.putView(view)
+    return json({ ok: true, view: saved })
+  } catch (error) {
+    ctx.logger?.warn?.('dk-dsh-archive-manager: view save failed: %o', error)
+    return json({ ok: false, reason: 'save-failed' }, 500)
+  }
+}
+
+/**
+ * Delete one saved view.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @param {Promise<object>} storePromise - Metadata store.
+ * @param {Request} request - Incoming request.
+ * @returns {Promise<Response>} JSON result.
+ */
+async function handleViewDelete(ctx, storePromise, request) {
+  const parsed = await readBody(request)
+  if (parsed.response !== undefined) return parsed.response
+  const id = parsed.body.id
+  if (typeof id !== 'string' || id.length === 0 || id.length > 100) {
+    return json({ ok: false, reason: 'invalid-request' }, 400)
+  }
+  try {
+    const store = await storePromise
+    const deleted = await store.deleteView(id)
+    return json({ ok: true, deleted })
+  } catch (error) {
+    ctx.logger?.warn?.('dk-dsh-archive-manager: view delete failed: %o', error)
+    return json({ ok: false, reason: 'save-failed' }, 500)
+  }
+}
+
+/**
+ * Return the archive timestamp for the built-in archive notice. The route waits
+ * briefly because the Host listener and the notice waterfall can race.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @param {Promise<object>} storePromise - Metadata store.
+ * @param {Request} request - Incoming request.
+ * @returns {Promise<Response>} JSON notice facts.
+ */
+async function handleNotice(ctx, storePromise, request) {
+  const parsed = await readSessionBody(request)
+  if (parsed.response !== undefined) return parsed.response
+  try {
+    const store = await storePromise
+    let entry = store.get(parsed.sessionId)
+    // Wait out the archive-listener race, including a re-archive whose record
+    // still carries the previous restore timestamp.
+    for (let attempt = 0; attempt < 4 && (entry?.archivedAt === undefined || entry?.restoredAt !== undefined); attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 40))
+      entry = store.get(parsed.sessionId)
+    }
+    return json({
+      ok: true,
+      archivedAt: entry?.archivedAt ?? null,
+      restoredAt: entry?.restoredAt ?? null,
+      note: entry?.note ?? null,
+      tags: entry?.tags ?? [],
+    })
+  } catch (error) {
+    ctx.logger?.warn?.('dk-dsh-archive-manager: notice lookup failed: %o', error)
+    return json({ ok: false, reason: 'read-failed' }, 500)
+  }
+}
+
+/**
+ * Ask the activity waterfall, if any, whether a session is currently active.
+ * No providers means "assume idle": the archive call itself still refuses.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @param {string} sessionId - Session id.
+ * @returns {Promise<object[]>} Activity list.
+ */
+async function probeActivity(ctx, sessionId) {
+  if (typeof ctx.waterfall !== 'function') return []
+  try {
+    const value = await ctx.waterfall('workspace/session-activity', { sessionId }, () => Promise.resolve([]))
+    return Array.isArray(value) ? value : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Build one candidate row.
+ * @param {object} record - Session record.
+ * @param {boolean} archived - Whether it is archived.
+ * @param {object[]} activity - Activity details.
+ * @param {(sessionId: string, cwd?: string) => object | undefined} workspaceOf - Workspace lookup.
+ * @param {unknown} titleResults - Title snapshots.
+ * @returns {object} Candidate row.
+ */
+function candidateItem(record, archived, activity, workspaceOf, titleResults) {
+  const header = record?.header ?? {}
+  const sessionId = String(header.id)
+  const workspace = workspaceOf(sessionId, header.cwd)
+  return {
+    sessionId,
+    title: titleOf(titleResults, sessionId),
+    workspaceTitle: workspace?.title ?? (typeof header.cwd === 'string' ? basename(header.cwd) : null),
+    cwd: typeof header.cwd === 'string' ? header.cwd : null,
+    createdAt: Number.isFinite(header.createdAt) ? header.createdAt : null,
+    lastActivityAt: Number.isFinite(header.lastActivityAt) ? header.lastActivityAt : null,
+    archived,
+    active: activity.length > 0,
+    activity,
+  }
 }
 
 /**

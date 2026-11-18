@@ -15,6 +15,18 @@ export const NOTE_MAX = 2000
 export const TAG_MAX = 40
 /** Most tags kept on one archive entry. */
 export const TAGS_MAX = 20
+/** Longest saved-view name accepted. */
+export const VIEW_NAME_MAX = 40
+/** Most saved views kept per profile. */
+export const VIEWS_MAX = 50
+/** Most audit entries kept on one archive record. */
+export const HISTORY_MAX = 50
+/** Longest transcript text returned per event. */
+export const TRANSCRIPT_TEXT_MAX = 1200
+/** Valid list filters mirrored by the Client. */
+export const LIST_FILTERS = ['all', 'noted', 'tagged', 'unknown', 'ghost']
+/** Valid list sorts mirrored by the Client. */
+export const LIST_SORTS = ['archived-desc', 'archived-asc', 'active-desc', 'size-desc', 'title']
 
 /**
  * Normalize a user note: trim, collapse nothing, cap length.
@@ -56,6 +68,50 @@ export function normalizeTags(value) {
 }
 
 /**
+ * Normalize the audit trail: valid timestamps only, chronological, de-duplicated,
+ * capped at HISTORY_MAX. The trail is optional so pre-upgrade entries still load.
+ * @param {unknown} value - Stored trail.
+ * @returns {{ at: number, action: 'archived' | 'restored', source: 'user' | 'plugin' | 'system' }[]} Normalized trail.
+ */
+export function normalizeHistory(value) {
+  const out = []
+  const seen = new Set()
+  for (const raw of Array.isArray(value) ? value : []) {
+    if (raw === null || typeof raw !== 'object') continue
+    const at = Number.isFinite(raw.at) && raw.at > 0 ? raw.at : undefined
+    if (at === undefined) continue
+    const action = raw.action === 'restored' ? 'restored' : raw.action === 'archived' ? 'archived' : undefined
+    if (action === undefined) continue
+    const key = `${action}:${at}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const source = raw.source === 'user' ? 'user' : raw.source === 'system' ? 'system' : 'plugin'
+    out.push({ at, action, source })
+  }
+  out.sort((a, b) => a.at - b.at)
+  // Keep the newest events when a record exceeds the cap, even if the input
+  // arrived out of order.
+  return out.slice(-HISTORY_MAX)
+}
+
+/**
+ * Append one audit event. A repeated archive notification keeps the first
+ * archived event; a re-archive after restore appends a fresh one.
+ * @param {readonly { at: number, action: 'archived' | 'restored', source: 'user' | 'plugin' | 'system' }[]} history - Existing trail.
+ * @param {number} at - Event timestamp.
+ * @param {'archived' | 'restored'} action - Event kind.
+ * @param {'user' | 'plugin' | 'system'} source - Who acted.
+ * @returns {{ at: number, action: 'archived' | 'restored', source: 'user' | 'plugin' | 'system' }[]} New trail.
+ */
+export function appendHistory(history, at, action, source) {
+  const base = normalizeHistory(history)
+  const last = base[base.length - 1]
+  if (last !== undefined && last.action === action && Math.abs(last.at - at) < 2000) return base
+  const next = [...base, { at, action, source }]
+  return next.slice(-HISTORY_MAX)
+}
+
+/**
  * Coerce one stored record into the current entry shape.
  *
  * Missing archive time is preserved as "unknown" instead of inventing a time:
@@ -64,7 +120,7 @@ export function normalizeTags(value) {
  *
  * @param {string} sessionId - Session id (authoritative key).
  * @param {unknown} value - Stored record.
- * @returns {{ sessionId: string, archivedAt?: number, note?: string, tags: string[], source: 'user' | 'plugin', inferred: boolean, restoredAt?: number }} Normalized entry.
+ * @returns {{ sessionId: string, archivedAt?: number, note?: string, tags: string[], source: 'user' | 'plugin', inferred: boolean, restoredAt?: number, history: { at: number, action: 'archived' | 'restored', source: 'user' | 'plugin' | 'system' }[] }} Normalized entry.
  */
 export function normalizeEntry(sessionId, value) {
   const record = value !== null && typeof value === 'object' ? value : {}
@@ -77,11 +133,21 @@ export function normalizeEntry(sessionId, value) {
   const note = normalizeNote(record.note)
   const tags = normalizeTags(record.tags)
   const source = record.source === 'user' ? 'user' : 'plugin'
+  let history = normalizeHistory(record.history)
+  // Old records predate the trail. Reconstruct the events they already know
+  // about instead of dropping the timeline on upgrade.
+  if (history.length === 0 && archivedAt !== undefined) {
+    history = appendHistory(history, archivedAt, 'archived', source)
+    if (restoredAt !== undefined && restoredAt > archivedAt) {
+      history = appendHistory(history, restoredAt, 'restored', source)
+    }
+  }
   const entry = {
     sessionId,
     tags,
     source,
     inferred: archivedAt !== undefined ? record.inferred !== false : true,
+    history,
   }
   if (archivedAt !== undefined) entry.archivedAt = archivedAt
   if (note !== undefined) entry.note = note
@@ -96,9 +162,10 @@ export function normalizeEntry(sessionId, value) {
  * @param {string} sessionId - Session id.
  * @param {unknown} current - Existing entry, if any.
  * @param {number} now - Timestamp for a newly observed archive.
+ * @param {'user' | 'plugin' | 'system'} [source] - Who triggered the archive.
  * @returns {ReturnType<typeof normalizeEntry>} Entry to persist.
  */
-export function entryForArchive(sessionId, current, now) {
+export function entryForArchive(sessionId, current, now, source = 'plugin') {
   const base = normalizeEntry(sessionId, current)
   const existing = base.archivedAt
   const archivedAt = base.restoredAt !== undefined ? now : existing ?? now
@@ -106,7 +173,8 @@ export function entryForArchive(sessionId, current, now) {
     ...base,
     archivedAt,
     inferred: false,
-    source: base.source,
+    source: base.source === 'user' ? 'user' : source,
+    history: appendHistory(base.history, archivedAt, 'archived', source),
   }
   delete next.restoredAt
   return next
@@ -117,11 +185,16 @@ export function entryForArchive(sessionId, current, now) {
  * @param {string} sessionId - Session id.
  * @param {unknown} current - Existing entry.
  * @param {number} now - Restore timestamp.
+ * @param {'user' | 'plugin' | 'system'} [source] - Who triggered the restore.
  * @returns {ReturnType<typeof normalizeEntry>} Entry to persist.
  */
-export function entryForRestore(sessionId, current, now) {
+export function entryForRestore(sessionId, current, now, source = 'user') {
   const base = normalizeEntry(sessionId, current)
-  return { ...base, restoredAt: now }
+  return {
+    ...base,
+    restoredAt: now,
+    history: appendHistory(base.history, now, 'restored', source),
+  }
 }
 
 /**
@@ -249,6 +322,126 @@ export function summarizeEvents(events) {
     lastEventType,
     topTools,
   }
+}
+
+/**
+ * Serialize an unknown value for a transcript row without throwing.
+ * @param {unknown} value - Value to show.
+ * @returns {string} Compact JSON or an empty string.
+ */
+function stringifyForTranscript(value) {
+  if (value === undefined || value === null) return ''
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+/**
+ * Project one session event into a bounded, read-only transcript row.
+ * @param {{ type?: unknown, time?: unknown, data?: unknown }} event - Session event.
+ * @param {number} index - Position in the full log.
+ * @returns {{ index: number, type: string, time: number | null, role: string | null, name: string | null, text: string, truncated: boolean }} Row.
+ */
+export function transcriptEvent(event, index) {
+  const source = event !== null && typeof event === 'object' ? event : {}
+  const type = typeof source.type === 'string' ? source.type : ''
+  const time = Number.isFinite(source.time) ? source.time : null
+  const data = source.data !== null && typeof source.data === 'object' ? source.data : undefined
+  let role = null
+  let name = null
+  let raw = ''
+
+  switch (type) {
+    case 'user/message':
+      role = 'user'
+      raw = messageText(data)
+      break
+    case 'assistant/message':
+      role = 'assistant'
+      raw = messageText(data?.message)
+      break
+    case 'assistant/reasoning':
+      role = 'assistant'
+      raw = typeof data?.text === 'string' ? data.text : stringifyForTranscript(data?.reasoning)
+      break
+    case 'tool/call':
+      role = 'tool'
+      name = typeof data?.name === 'string' ? data.name : null
+      raw = stringifyForTranscript(data?.arguments ?? data?.input)
+      break
+    case 'tool/result':
+      role = 'tool'
+      name = typeof data?.name === 'string' ? data.name : null
+      raw = stringifyForTranscript(data?.result ?? data?.output ?? data)
+      break
+    case 'system/message':
+      role = 'system'
+      raw = messageText(data?.message ?? data)
+      break
+    default:
+      raw = typeof data?.text === 'string' ? data.text : ''
+  }
+
+  const text = clipText(raw, TRANSCRIPT_TEXT_MAX)
+  return {
+    index,
+    type,
+    time,
+    role,
+    name,
+    text,
+    truncated: typeof raw === 'string' && raw.trim().length > TRANSCRIPT_TEXT_MAX,
+  }
+}
+
+/**
+ * Project one bounded page of a session log. The caller supplies the already
+ * read events; this helper never returns the whole log.
+ * @param {readonly object[]} events - Session events.
+ * @param {{ offset?: number, limit?: number }} [options] - Page options.
+ * @returns {{ total: number, offset: number, limit: number, hasMore: boolean, nextOffset: number | null, items: object[] }} Page.
+ */
+export function transcriptPage(events, options = {}) {
+  const total = Array.isArray(events) ? events.length : 0
+  const offset = Number.isInteger(options.offset) && options.offset >= 0 ? options.offset : 0
+  const limit = Number.isInteger(options.limit) && options.limit > 0 ? Math.min(options.limit, 100) : 40
+  const start = Math.min(offset, total)
+  const end = Math.min(start + limit, total)
+  const items = []
+  for (let index = start; index < end; index += 1) {
+    items.push(transcriptEvent(events[index], index))
+  }
+  return {
+    total,
+    offset: start,
+    limit,
+    hasMore: end < total,
+    nextOffset: end < total ? end : null,
+    items,
+  }
+}
+
+/**
+ * Normalize a saved view. Returns undefined for a nameless/invalid record.
+ * @param {string} id - Stable view id.
+ * @param {unknown} value - Stored view.
+ * @returns {{ id: string, name: string, query: string, filter: string, sort: string, tag: string, createdAt: number, updatedAt: number } | undefined} View.
+ */
+export function normalizeView(id, value) {
+  if (typeof id !== 'string' || id.length === 0) return undefined
+  const record = value !== null && typeof value === 'object' ? value : {}
+  const name = typeof record.name === 'string' ? record.name.trim().slice(0, VIEW_NAME_MAX) : ''
+  if (name.length === 0) return undefined
+  const query = typeof record.query === 'string' ? record.query.trim().slice(0, 200) : ''
+  const filter = LIST_FILTERS.includes(record.filter) ? record.filter : 'all'
+  const sort = LIST_SORTS.includes(record.sort) ? record.sort : 'archived-desc'
+  const tag = typeof record.tag === 'string' ? record.tag.trim().slice(0, TAG_MAX) : ''
+  const createdAt = Number.isFinite(record.createdAt) && record.createdAt > 0 ? record.createdAt : Date.now()
+  const updatedAt = Number.isFinite(record.updatedAt) && record.updatedAt > 0 ? record.updatedAt : createdAt
+  return { id, name, query, filter, sort, tag, createdAt, updatedAt }
 }
 
 /**
