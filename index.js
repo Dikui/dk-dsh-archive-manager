@@ -50,8 +50,22 @@ const MAX_BODY_BYTES = 256 * 1024
 const MAX_BATCH = 200
 
 /** Most non-archived sessions returned by the candidate pool. */
-const MAX_CANDIDATES = 120
-const MAX_ARCHIVED_CANDIDATES = 40
+const MAX_CANDIDATES = 200
+const MAX_ARCHIVED_CANDIDATES = 100
+
+/** Time-window presets accepted by the batch workspace. */
+const CANDIDATE_RANGES = new Map([
+  ['24h', 24 * 60 * 60 * 1000],
+  ['7d', 7 * 24 * 60 * 60 * 1000],
+  ['30d', 30 * 24 * 60 * 60 * 1000],
+  ['90d', 90 * 24 * 60 * 60 * 1000],
+])
+
+/** Which timestamp a batch time window applies to. */
+const CANDIDATE_BASES = new Set(['activity', 'created'])
+
+/** Which archive states the batch workspace may show. */
+const CANDIDATE_STATES = new Set(['all', 'open', 'archived'])
 
 /** Host services this plugin requires. */
 export const inject = [
@@ -331,13 +345,13 @@ async function handleList(ctx, storePromise, request) {
 
     const [records, snapshots, workspaces, titleResults] = await Promise.all([
       ctx.sessionQuery.listSessions(),
-      ctx.sessionPersistence.list(),
+      safeList(() => ctx.sessionPersistence.list()),
       safeList(() => ctx.workspaceRegistry.list()),
       safeList(async () => ctx.sessionQuery.readTitleSnapshots(ids)),
     ])
 
     const recordById = new Map(records.map(record => [String(record.header.id), record]))
-    const snapshotById = new Map(snapshots.map(snapshot => [String(snapshot.header.id), snapshot]))
+    const snapshotById = snapshotMap(ctx, snapshots)
     const workspaceOf = makeWorkspaceLookup(workspaces, recordById)
     const sizes = await mapLimit(ids, 8, sessionId => sizeInfo(snapshotById.get(sessionId)))
 
@@ -609,8 +623,10 @@ async function handleTranscript(ctx, _storePromise, request) {
 }
 
 /**
- * List sessions for the batch-archive candidate pool. Archived rows are shown
- * as context; only non-archived rows can be selected in the Client.
+ * List sessions for the batch workspace. The optional `range`/`basis` pair
+ * filters by a time window, and `state` narrows the result to open sessions,
+ * archived sessions, or both. Archived rows are shown as context; only
+ * non-archived rows can be archived and only archived rows can be restored.
  * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
  * @param {Promise<object>} _storePromise - Metadata store (unused).
  * @param {Request} request - Incoming request.
@@ -619,39 +635,126 @@ async function handleTranscript(ctx, _storePromise, request) {
 async function handleCandidates(ctx, _storePromise, request) {
   const parsed = await readBody(request)
   if (parsed.response !== undefined) return parsed.response
+  const range = CANDIDATE_RANGES.has(parsed.body.range) ? parsed.body.range : 'all'
+  const basis = CANDIDATE_BASES.has(parsed.body.basis) ? parsed.body.basis : 'activity'
+  const state = CANDIDATE_STATES.has(parsed.body.state) ? parsed.body.state : 'all'
 
   try {
-    const [records, archived, workspaces] = await Promise.all([
+    // `locate` is synchronous and avoids a second full persistence scan;
+    // `list` remains a fallback for backends that expose snapshot locations.
+    const canLocate = typeof ctx.sessionPersistence?.locate === 'function'
+    const [records, archived, workspaces, snapshots] = await Promise.all([
       ctx.sessionQuery.listSessions(),
       archivedIds(ctx),
       safeList(() => ctx.workspaceRegistry.list()),
+      canLocate ? [] : safeList(() => ctx.sessionPersistence.list()),
     ])
-    const titleResults = await safeList(() => ctx.sessionQuery.readTitleSnapshots(
-      records.map(record => String(record.header.id)).slice(0, 300),
-    ))
     const archivedSet = new Set(archived)
     const workspaceOf = makeWorkspaceLookup(workspaces, new Map(records.map(record => [String(record.header.id), record])))
-    const sorted = [...records].sort((a, b) => (b.header?.createdAt ?? 0) - (a.header?.createdAt ?? 0))
-    const open = sorted.filter(record => !archivedSet.has(String(record.header.id))).slice(0, MAX_CANDIDATES)
-    const activities = await mapLimit(open, 4, record => probeActivity(ctx, String(record.header.id)))
+    const snapshotById = snapshotMap(ctx, snapshots)
+
+    // Apply state before timestamps so a state-filtered request never stats
+    // sessions it will not show.
+    const inState = state === 'all' ? records : records.filter(record => {
+      const isArchived = archivedSet.has(String(record.header.id))
+      return state === 'open' ? !isArchived : isArchived
+    })
+
+    // Session headers carry no activity timestamp, so use the session log
+    // mtime when the activity basis needs a real "last used" time.
+    const activityById = new Map()
+    if (basis === 'activity') {
+      const times = await mapLimit(inState, 8, record => lastActivityOf(
+        ctx,
+        record?.header,
+        snapshotById.get(String(record?.header?.id)),
+      ))
+      inState.forEach((record, index) => {
+        const id = String(record?.header?.id)
+        if (times[index] !== null) activityById.set(id, times[index])
+      })
+    }
+
+    const windowMs = CANDIDATE_RANGES.get(range) ?? null
+    const cutoff = windowMs === null ? null : Date.now() - windowMs
+    const timeOf = record => {
+      const header = record?.header ?? {}
+      const created = Number.isFinite(header.createdAt) ? header.createdAt : null
+      const active = activityById.get(String(header.id)) ?? (Number.isFinite(header.lastActivityAt) ? header.lastActivityAt : null)
+      return basis === 'created' ? created : (active ?? created)
+    }
+    const matching = inState.filter(record => {
+      if (cutoff !== null) {
+        const time = timeOf(record)
+        if (time === null || time < cutoff) return false
+      }
+      return true
+    })
+    matching.sort((a, b) => (timeOf(b) ?? 0) - (timeOf(a) ?? 0)
+      || (b.header?.createdAt ?? 0) - (a.header?.createdAt ?? 0))
+    const openAll = matching.filter(record => !archivedSet.has(String(record.header.id)))
+    const archivedAll = matching.filter(record => archivedSet.has(String(record.header.id)))
+    const open = openAll.slice(0, MAX_CANDIDATES)
+    const archivedRows = archivedAll.slice(0, MAX_ARCHIVED_CANDIDATES)
+
+    // Filters run before titles so a very large history cannot crowd the
+    // displayed rows out of the title snapshot batch.
+    const displayed = [...open, ...archivedRows]
+    const missingActivity = displayed.filter(record => !activityById.has(String(record?.header?.id)))
+    const [titleResults, activities, missingTimes] = await Promise.all([
+      safeList(() => ctx.sessionQuery.readTitleSnapshots(
+        displayed.map(record => String(record.header.id)).slice(0, 300),
+      )),
+      mapLimit(open, 4, record => probeActivity(ctx, String(record.header.id))),
+      mapLimit(missingActivity, 8, record => lastActivityOf(
+        ctx,
+        record?.header,
+        snapshotById.get(String(record?.header?.id)),
+      )),
+    ])
+    missingActivity.forEach((record, index) => {
+      const id = String(record?.header?.id)
+      if (missingTimes[index] !== null) activityById.set(id, missingTimes[index])
+    })
 
     // Actionable (open) rows come first so a large archive set cannot crowd
     // out the sessions a batch archive can actually act on.
     const items = []
     for (let index = 0; index < open.length; index += 1) {
-      items.push(candidateItem(open[index], false, activities[index], workspaceOf, titleResults))
+      const record = open[index]
+      items.push(candidateItem(
+        record,
+        false,
+        activities[index],
+        workspaceOf,
+        titleResults,
+        activityById.get(String(record.header.id)),
+      ))
     }
-    items.push(...sorted
-      .filter(record => archivedSet.has(String(record.header.id)))
-      .slice(0, MAX_ARCHIVED_CANDIDATES)
-      .map(record => candidateItem(record, true, [], workspaceOf, titleResults)))
+    items.push(...archivedRows
+      .map(record => candidateItem(
+        record,
+        true,
+        [],
+        workspaceOf,
+        titleResults,
+        activityById.get(String(record.header.id)),
+      )))
 
     return json({
       ok: true,
       items,
+      range,
+      basis,
+      state,
       archivedCount: archivedSet.size,
       archivedSessionIds: archived,
       openCount: open.length,
+      openTotal: openAll.length,
+      archivedTotal: archivedAll.length,
+      total: matching.length,
+      truncatedOpen: openAll.length > open.length,
+      truncatedArchived: archivedAll.length > archivedRows.length,
     })
   } catch (error) {
     ctx.logger?.warn?.('dk-dsh-archive-manager: candidate list failed: %o', error)
@@ -869,9 +972,10 @@ async function probeActivity(ctx, sessionId) {
  * @param {object[]} activity - Activity details.
  * @param {(sessionId: string, cwd?: string) => object | undefined} workspaceOf - Workspace lookup.
  * @param {unknown} titleResults - Title snapshots.
+ * @param {number | null | undefined} lastActivityAt - Log-derived activity time.
  * @returns {object} Candidate row.
  */
-function candidateItem(record, archived, activity, workspaceOf, titleResults) {
+function candidateItem(record, archived, activity, workspaceOf, titleResults, lastActivityAt) {
   const header = record?.header ?? {}
   const sessionId = String(header.id)
   const workspace = workspaceOf(sessionId, header.cwd)
@@ -881,7 +985,9 @@ function candidateItem(record, archived, activity, workspaceOf, titleResults) {
     workspaceTitle: workspace?.title ?? (typeof header.cwd === 'string' ? basename(header.cwd) : null),
     cwd: typeof header.cwd === 'string' ? header.cwd : null,
     createdAt: Number.isFinite(header.createdAt) ? header.createdAt : null,
-    lastActivityAt: Number.isFinite(header.lastActivityAt) ? header.lastActivityAt : null,
+    lastActivityAt: Number.isFinite(lastActivityAt)
+      ? lastActivityAt
+      : (Number.isFinite(header.lastActivityAt) ? header.lastActivityAt : null),
     archived,
     active: activity.length > 0,
     activity,
@@ -981,6 +1087,61 @@ function makeWorkspaceLookup(workspaces, records) {
     const path = typeof cwd === 'string' ? cwd : known?.header?.cwd
     if (typeof path !== 'string') return undefined
     return byPath.get(path.replace(/\/+$/, '') || '/')
+  }
+}
+
+/**
+ * Index persistence snapshots by session id. Some DSH persistence versions
+ * return bare headers from `list()`; attach the located artifact path so size
+ * and activity facts still work.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @param {object[]} snapshots - Snapshot or header objects.
+ * @returns {Map<string, object>} Snapshot by session id.
+ */
+function snapshotMap(ctx, snapshots) {
+  const byId = new Map()
+  for (const snapshot of snapshots) {
+    if (snapshot === null || typeof snapshot !== 'object') continue
+    const header = snapshot.header ?? snapshot
+    const id = header?.id
+    if (typeof id !== 'string') continue
+    if (snapshot.header !== undefined) {
+      byId.set(id, snapshot)
+      continue
+    }
+    const normalized = { header }
+    try {
+      const location = ctx.sessionPersistence?.locate?.(header)
+      if (location !== undefined) normalized.location = location
+    } catch { /* no located artifact */ }
+    byId.set(id, normalized)
+  }
+  return byId
+}
+
+/**
+ * Last write time of a session log. Session headers have no activity field, so
+ * the persistence artifact's mtime is the cheapest truthful activity source.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @param {object | undefined} header - Session header.
+ * @param {object | undefined} snapshot - Persistence snapshot, if available.
+ * @returns {Promise<number | null>} Epoch milliseconds, or null if unknown.
+ */
+async function lastActivityOf(ctx, header, snapshot) {
+  let path = snapshot?.location?.path
+  if (typeof path !== 'string' || path.length === 0) {
+    try {
+      path = ctx.sessionPersistence?.locate?.(header)?.path
+    } catch {
+      path = undefined
+    }
+  }
+  if (typeof path !== 'string' || path.length === 0) return null
+  try {
+    const info = await stat(path)
+    return info.isFile() ? info.mtimeMs : null
+  } catch {
+    return null
   }
 }
 

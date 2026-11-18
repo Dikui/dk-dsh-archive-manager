@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -31,7 +31,7 @@ function snapshot(id) {
   }
 }
 
-function makeHarness({ getter = true, tools = false, config } = {}) {
+function makeHarness({ getter = true, tools = false, config, listHeaders = false, snapshots = [snapshot(SESSION_ID)] } = {}) {
   const routes = new Map()
   const listeners = new Map()
   const archived = new Set([SESSION_ID, GHOST_ID])
@@ -165,7 +165,11 @@ function makeHarness({ getter = true, tools = false, config } = {}) {
     },
     sessionPersistence: {
       list() {
-        return [snapshot(SESSION_ID)]
+        return listHeaders ? [header(SESSION_ID)] : snapshots
+      },
+      locate(meta) {
+        const found = snapshots.find(item => (item.header?.id ?? item.id) === meta.id)
+        return found?.location ?? { kind: 'file', path: `/tmp/${meta.id}.jsonl` }
       },
       stat(id) {
         return id === SESSION_ID ? snapshot(id) : undefined
@@ -266,6 +270,15 @@ test('list joins archive set, title, size, workspace, and metadata', async () =>
     else process.env.DSH_HOME = previous
     await rm(home, { recursive: true, force: true })
   }
+})
+
+test('list tolerates persistence backends that return bare headers', async () => {
+  const { routes } = makeHarness({ listHeaders: true })
+  const response = await post(routes, 'list', {})
+  assert.equal(response.status, 200)
+  const body = await response.json()
+  assert.equal(body.ok, true)
+  assert.ok(body.items.some(item => item.sessionId === SESSION_ID))
 })
 
 test('falls back to the controller baseline when the registry getter is hidden', async () => {
@@ -409,6 +422,65 @@ test('candidates mark active sessions and list archived ones separately', async 
   const archived = body.items.find(item => item.sessionId === SESSION_ID)
   assert.equal(archived.archived, true)
   assert.equal(archived.active, false)
+})
+
+test('candidates apply time range, basis, and state filters', async () => {
+  const { routes } = makeHarness()
+
+  const openOnly = await (await post(routes, 'candidates', { state: 'open' })).json()
+  assert.equal(openOnly.state, 'open')
+  assert.equal(openOnly.openTotal, 1)
+  assert.equal(openOnly.archivedTotal, 0)
+  assert.equal(openOnly.total, 1)
+  assert.deepEqual(openOnly.items.map(item => item.sessionId), [ACTIVE_ID])
+
+  const archivedOnly = await (await post(routes, 'candidates', { state: 'archived' })).json()
+  assert.equal(archivedOnly.archivedTotal, 1)
+  assert.equal(archivedOnly.openTotal, 0)
+  assert.deepEqual(archivedOnly.items.map(item => item.sessionId), [SESSION_ID])
+
+  const allTime = await (await post(routes, 'candidates', { range: 'all' })).json()
+  assert.equal(allTime.total, 2)
+  assert.equal(allTime.truncatedOpen, false)
+  assert.equal(allTime.truncatedArchived, false)
+
+  // Fixture sessions were created in 2023, so a recent window excludes them.
+  const recent = await (await post(routes, 'candidates', { range: '7d', basis: 'activity' })).json()
+  assert.equal(recent.range, '7d')
+  assert.equal(recent.total, 0)
+  assert.equal(recent.items.length, 0)
+
+  const fallback = await (await post(routes, 'candidates', {
+    range: 'nope',
+    basis: 'nope',
+    state: 'nope',
+  })).json()
+  assert.equal(fallback.range, 'all')
+  assert.equal(fallback.basis, 'activity')
+  assert.equal(fallback.state, 'all')
+})
+
+test('candidates use the session log mtime for the activity basis', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dkam-activity-'))
+  try {
+    const path = join(dir, 'session.jsonl')
+    await writeFile(path, '{}\n')
+    const mtime = Date.now() - 1_000
+    await utimes(path, new Date(mtime), new Date(mtime))
+    const { routes } = makeHarness({
+      snapshots: [{
+        ...snapshot(SESSION_ID),
+        location: { kind: 'file', path },
+      }],
+    })
+
+    const result = await (await post(routes, 'candidates', { range: '7d', basis: 'activity' })).json()
+    assert.equal(result.total, 1)
+    assert.deepEqual(result.items.map(item => item.sessionId), [SESSION_ID])
+    assert.ok(Math.abs(result.items[0].lastActivityAt - mtime) < 50)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })
 
 test('archive-many refuses to stop an active session without explicit confirmation', async () => {

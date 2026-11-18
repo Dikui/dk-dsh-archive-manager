@@ -122,9 +122,39 @@ window.__ModuleLoader__.load({
         viewDeleted: 'View deleted',
         viewSaveFailed: 'Could not save the view',
         viewDeleteFailed: 'Could not delete the view',
-        batchArchive: 'Batch archive',
+        batchArchive: 'Batch workspace',
         batchTitle: 'Archive sessions',
-        batchDesc: 'Select sessions to archive. Active sessions list their work and need explicit confirmation before anything is stopped.',
+        batchDesc: 'Filter sessions by time, choose exactly what to change, then archive or restore them in one step. Active sessions still require explicit confirmation before anything is stopped.',
+        tabArchive: 'Archive library',
+        tabBatch: 'Batch workspace',
+        timeRange: 'Time range',
+        rangeAll: 'All time',
+        range24h: 'Past 24 hours',
+        range7d: 'Past 7 days',
+        range30d: 'Past 30 days',
+        range90d: 'Past 90 days',
+        timeBasis: 'Time basis',
+        basisActivity: 'Last activity',
+        basisCreated: 'Created',
+        batchState: 'Session state',
+        batchStateOpen: 'To archive',
+        batchStateArchived: 'Archived',
+        batchStateAll: 'All',
+        batchSearchPlaceholder: 'Search loaded sessions',
+        batchSortRecent: 'Recently active',
+        batchSortCreated: 'Newest created',
+        batchSortTitle: 'Title',
+        batchLoaded: 'Matching',
+        batchOpenSelected: 'to archive',
+        batchArchivedSelected: 'to restore',
+        batchClearSelection: 'Clear selection',
+        batchTruncated: 'Only the first 200 open and 100 archived sessions are listed. Narrow the time range to see the rest.',
+        batchEmptyTitle: 'No sessions match these filters',
+        batchEmptyHint: 'Try a wider time range, or show both open and archived sessions.',
+        batchUseAllTime: 'Use all time',
+        batchUseAllStates: 'Show all sessions',
+        batchRestored: 'Restored',
+        batchActiveWarn: 'These sessions are doing work. Confirm that stopping their activity is okay.',
         candidateLoading: 'Loading sessions…',
         candidateEmpty: 'No sessions are available to archive',
         candidateArchived: 'Archived',
@@ -260,9 +290,39 @@ window.__ModuleLoader__.load({
         viewDeleted: '视图已删除',
         viewSaveFailed: '视图保存失败',
         viewDeleteFailed: '视图删除失败',
-        batchArchive: '批量归档',
+        batchArchive: '批量工作台',
         batchTitle: '归档会话',
-        batchDesc: '选择要归档的会话。活跃会话会列出正在进行的活动，必须显式确认后才会停止。',
+        batchDesc: '按时间筛选会话，明确勾选要处理的项，再一步完成归档或恢复。活动中的会话仍需显式确认后才会停止。',
+        tabArchive: '归档库',
+        tabBatch: '批量工作台',
+        timeRange: '时间范围',
+        rangeAll: '全部时间',
+        range24h: '过去 24 小时',
+        range7d: '过去 7 天',
+        range30d: '过去 30 天',
+        range90d: '过去 90 天',
+        timeBasis: '时间依据',
+        basisActivity: '最后活动',
+        basisCreated: '创建时间',
+        batchState: '会话状态',
+        batchStateOpen: '待归档',
+        batchStateArchived: '已归档',
+        batchStateAll: '全部',
+        batchSearchPlaceholder: '搜索已加载会话',
+        batchSortRecent: '最近活动',
+        batchSortCreated: '最新创建',
+        batchSortTitle: '按标题',
+        batchLoaded: '匹配',
+        batchOpenSelected: '待归档',
+        batchArchivedSelected: '待恢复',
+        batchClearSelection: '清空选择',
+        batchTruncated: '受上限限制，仅显示前 200 个待归档和 100 个已归档会话；可缩小时间范围查看其余会话。',
+        batchEmptyTitle: '当前筛选没有会话',
+        batchEmptyHint: '试试扩大时间范围，或切换为全部状态。',
+        batchUseAllTime: '使用全部时间',
+        batchUseAllStates: '查看全部会话',
+        batchRestored: '已恢复',
+        batchActiveWarn: '这些会话正在执行任务，请确认可以停止其活动。',
         candidateLoading: '正在加载会话…',
         candidateEmpty: '没有可归档的会话',
         candidateArchived: '已归档',
@@ -395,12 +455,46 @@ window.__ModuleLoader__.load({
 .dkam-toast{position:fixed;left:50%;bottom:28px;z-index:40;transform:translateX(-50%);max-width:min(560px,calc(100vw - 40px));padding:10px 16px;border:1px solid var(--dkam-border-strong);border-radius:999px;background:var(--dkam-layer);color:var(--dkam-text);box-shadow:0 12px 40px var(--dsw-alias-bg-mask-1,rgba(0,0,0,.24));font-size:13px;text-align:center}
 .dkam-spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--dkam-border);border-top-color:var(--dkam-brand);border-radius:50%;animation:dkam-spin .8s linear infinite}
 @keyframes dkam-spin{to{transform:rotate(360deg)}}
-@media (max-width:860px){.dkam-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.dkam-row{grid-template-columns:22px minmax(0,1fr)}.dkam-row-meta{grid-column:2;flex-direction:row;align-items:center;gap:10px}.dkam-row-actions{grid-column:2;justify-content:flex-start}.dkam-toolbar-actions{margin-left:0}.dkam-head{padding:18px 18px 12px}.dkam-scroll{padding:12px 18px 32px}}
-@media (max-width:560px){.dkam-search{max-width:none;flex-basis:100%}.dkam-select{flex:1 1 0;max-width:none}.dkam-dialog{width:calc(100vw - 20px);max-height:92vh}.dkam-dialog-head,.dkam-dialog-body,.dkam-dialog-foot{padding-left:16px;padding-right:16px}.dkam-meta-grid{grid-template-columns:1fr}}
+@media (max-width:860px){.dkam-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.dkam-row{grid-template-columns:22px minmax(0,1fr)}.dkam-row-meta{grid-column:2;flex-direction:row;align-items:center;gap:10px}.dkam-row-actions{grid-column:2;justify-content:flex-start}.dkam-toolbar-actions{margin-left:0}.dkam-head{padding:18px 18px 12px}.dkam-scroll{padding:12px 18px 32px}.dkam-batch-filters,.dkam-batch-bar,.dkam-batch-scroll,.dkam-batch-foot{padding-left:18px;padding-right:18px}.dkam-batch-warn{margin-left:18px;margin-right:18px}.dkam-batch-row{grid-template-columns:20px minmax(0,1fr)}.dkam-batch-side{display:none}}
+@media (max-width:560px){.dkam-search{max-width:none;flex-basis:100%}.dkam-select{flex:1 1 0;max-width:none}.dkam-dialog{width:calc(100vw - 20px);max-height:92vh}.dkam-dialog-head,.dkam-dialog-body,.dkam-dialog-foot{padding-left:16px;padding-right:16px}.dkam-meta-grid{grid-template-columns:1fr}.dkam-head-row{flex-wrap:wrap}.dkam-head-actions{width:100%;justify-content:space-between}.dkam-tabs{flex:1 1 auto}.dkam-tab{flex:1}.dkam-batch .dkam-search{flex-basis:100%;max-width:none}.dkam-filter{flex:1 1 0}.dkam-filter .dkam-select{width:100%;max-width:none}.dkam-seg{width:100%}.dkam-seg button{flex:1}.dkam-batch-bar .dkam-select{margin-left:0;max-width:none;flex:1}.dkam-batch-foot{align-items:flex-start;flex-direction:column}.dkam-batch-actions{width:100%}.dkam-batch-actions .dkam-btn{flex:1}}
 .dkam-viewbar{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:10px}
 .dkam-viewbar .dkam-select{max-width:220px}
 .dkam-view-editor{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px}
 .dkam-view-editor input{height:32px;min-width:180px;padding:0 10px;border:1px solid var(--dkam-border);border-radius:8px;background:var(--dkam-layer-2);color:var(--dkam-text);font:inherit;font-size:12.5px;outline:none}
+.dkam-head-actions{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+.dkam-tabs{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--dkam-border);border-radius:9px;background:var(--dkam-layer-2)}
+.dkam-tab{height:28px;padding:0 10px;border:none;border-radius:7px;background:transparent;color:var(--dkam-muted);font:inherit;font-size:12.5px;font-weight:500;cursor:pointer;white-space:nowrap}
+.dkam-tab:hover{color:var(--dkam-text)}
+.dkam-tab[data-active='true']{background:var(--dkam-layer);color:var(--dkam-text);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.dkam-batch{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.dkam-batch-filters{display:flex;align-items:flex-end;flex-wrap:wrap;gap:8px;padding:14px 26px;border-bottom:1px solid var(--dkam-border);background:var(--dkam-layer)}
+.dkam-filter{display:flex;flex-direction:column;gap:3px;min-width:0}
+.dkam-filter>span{color:var(--dkam-faint);font-size:10.5px;letter-spacing:.02em;text-transform:uppercase}
+.dkam-filter .dkam-select{max-width:170px}
+.dkam-batch .dkam-search{flex:1 1 240px;max-width:360px}
+.dkam-seg{display:inline-flex;height:34px;padding:2px;border:1px solid var(--dkam-border);border-radius:8px;background:var(--dkam-layer-2)}
+.dkam-seg button{height:28px;padding:0 10px;border:none;border-radius:6px;background:transparent;color:var(--dkam-muted);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
+.dkam-seg button[data-active='true']{background:var(--dkam-layer);color:var(--dkam-text);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.dkam-batch-bar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 26px;border-bottom:1px solid var(--dkam-border);color:var(--dkam-muted);font-size:12px}
+.dkam-batch-bar .dkam-select{margin-left:auto;max-width:160px}
+.dkam-batch-scroll{flex:1 1 auto;min-height:0;overflow:auto;padding:14px 26px 20px}
+.dkam-batch-list{display:flex;flex-direction:column;gap:8px}
+.dkam-batch-row{display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--dkam-border);border-radius:10px;background:var(--dkam-layer)}
+.dkam-batch-row:hover{border-color:var(--dkam-border-strong);background:var(--dkam-layer-2)}
+.dkam-batch-row[data-selected='true']{border-color:var(--dkam-brand);background:var(--dkam-brand-soft)}
+.dkam-batch-row>input{width:15px;height:15px;margin:0;accent-color:var(--dkam-brand)}
+.dkam-batch-row-main{min-width:0;cursor:pointer}
+.dkam-batch-row-title{display:flex;align-items:center;gap:7px;min-width:0}
+.dkam-batch-title-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;font-weight:600}
+.dkam-batch-row-sub{margin-top:3px;overflow:hidden;color:var(--dkam-muted);font-size:11.5px;text-overflow:ellipsis;white-space:nowrap}
+.dkam-batch-row-activity{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.dkam-batch-side{color:var(--dkam-faint);font-size:11px;text-align:right;white-space:nowrap}
+.dkam-batch-foot{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:12px 26px;border-top:1px solid var(--dkam-border);background:linear-gradient(0deg,var(--dkam-layer),var(--dkam-bg))}
+.dkam-batch-summary{display:flex;align-items:baseline;gap:5px;color:var(--dkam-muted);font-size:12px}
+.dkam-batch-summary strong{color:var(--dkam-text);font-size:17px;font-weight:650}
+.dkam-batch-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.dkam-batch-warn{margin:0 26px 10px}
+.dkam-empty-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:8px}
 .dkam-candidate-list{display:flex;flex-direction:column;gap:6px;max-height:48vh;overflow:auto;padding-right:2px}
 .dkam-candidate-row{display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--dkam-border);border-radius:9px;background:var(--dkam-layer-2)}
 .dkam-candidate-row[data-archived='true']{opacity:.62}
@@ -540,6 +634,32 @@ window.__ModuleLoader__.load({
       return filtered
     }
 
+    /** Local batch-workspace filter; the server already applied time/state. */
+    function filterBatchItems(items, options) {
+      const query = String(options.query ?? '').trim().toLocaleLowerCase()
+      const sort = options.sort ?? 'active-desc'
+      const filtered = (Array.isArray(items) ? items : []).filter(item => {
+        if (!query) return true
+        const haystack = [item.title, item.workspaceTitle, item.cwd, item.sessionId]
+          .filter(Boolean).join('\n').toLocaleLowerCase()
+        return haystack.includes(query)
+      })
+      const timeOf = item => (Number.isFinite(item.lastActivityAt) ? item.lastActivityAt : item.createdAt)
+      filtered.sort((a, b) => {
+        switch (sort) {
+          case 'created-desc':
+            return (b.createdAt ?? 0) - (a.createdAt ?? 0)
+          case 'title':
+            return String(a.title ?? '').localeCompare(String(b.title ?? ''), 'zh')
+          case 'active-desc':
+          default:
+            return (timeOf(b) ?? 0) - (timeOf(a) ?? 0)
+              || (b.createdAt ?? 0) - (a.createdAt ?? 0)
+        }
+      })
+      return filtered
+    }
+
     /**
      * The archive center panel.
      * @param {{ tr: (key: string) => string }} props - Locale translator.
@@ -567,15 +687,23 @@ window.__ModuleLoader__.load({
       const [viewEditorOpen, setViewEditorOpen] = useState(false)
       const [viewName, setViewName] = useState('')
       const [viewBusy, setViewBusy] = useState(false)
-      const [candidatesOpen, setCandidatesOpen] = useState(false)
-      const [candidates, setCandidates] = useState(null)
-      const [candidateSelected, setCandidateSelected] = useState(() => new Set())
-      const [candidateBusy, setCandidateBusy] = useState(false)
-      const [candidateFailures, setCandidateFailures] = useState([])
-      const [confirmStop, setConfirmStop] = useState(false)
+      const [mode, setMode] = useState('library')
+      const [batchItems, setBatchItems] = useState(null)
+      const [batchMeta, setBatchMeta] = useState(null)
+      const [batchLoading, setBatchLoading] = useState(false)
+      const [batchError, setBatchError] = useState(null)
+      const [batchRange, setBatchRange] = useState('7d')
+      const [batchBasis, setBatchBasis] = useState('activity')
+      const [batchState, setBatchState] = useState('open')
+      const [batchQuery, setBatchQuery] = useState('')
+      const [batchSort, setBatchSort] = useState('active-desc')
+      const [batchReloadKey, setBatchReloadKey] = useState(0)
+      const [batchSelected, setBatchSelected] = useState(() => new Set())
+      const [batchBusy, setBatchBusy] = useState(false)
+      const [batchFailures, setBatchFailures] = useState([])
+      const [batchConfirmStop, setBatchConfirmStop] = useState(false)
       const [transcript, setTranscript] = useState(null)
       const dialogRef = useRef(null)
-      const candidateDialogRef = useRef(null)
       const noticeTimer = useRef(null)
 
       const reasonText = useCallback((reason) => {
@@ -681,18 +809,36 @@ window.__ModuleLoader__.load({
       }, [refreshViews])
 
       useEffect(() => {
-        const dialog = candidateDialogRef.current
-        if (!dialog) return
-        if (candidatesOpen && !dialog.open) {
-          try {
-            dialog.showModal()
-          } catch {
-            dialog.setAttribute('open', '')
-          }
-        } else if (!candidatesOpen && dialog.open) {
-          dialog.close()
-        }
-      }, [candidatesOpen])
+        if (mode !== 'batch') return undefined
+        let cancelled = false
+        setBatchLoading(true)
+        setBatchError(null)
+        post('candidates', { range: batchRange, basis: batchBasis, state: batchState })
+          .then(data => {
+            if (cancelled) return
+            setBatchItems(Array.isArray(data.items) ? data.items : [])
+            setBatchMeta({
+              openTotal: Number.isFinite(data.openTotal) ? data.openTotal : 0,
+              archivedTotal: Number.isFinite(data.archivedTotal) ? data.archivedTotal : 0,
+              total: Number.isFinite(data.total) ? data.total : 0,
+              truncatedOpen: data.truncatedOpen === true,
+              truncatedArchived: data.truncatedArchived === true,
+            })
+            setBatchLoading(false)
+          })
+          .catch(error => {
+            if (cancelled) return
+            setBatchError(error.message || tr('loadFailed'))
+            setBatchLoading(false)
+          })
+        return () => { cancelled = true }
+      }, [mode, batchRange, batchBasis, batchState, batchReloadKey, post, tr])
+
+      useEffect(() => {
+        setBatchSelected(new Set())
+        setBatchFailures([])
+        setBatchConfirmStop(false)
+      }, [batchRange, batchBasis, batchState])
 
       const filtered = useMemo(
         () => filterItems(items, { query, filter, tag, sort }),
@@ -701,6 +847,25 @@ window.__ModuleLoader__.load({
 
       const allSelected = filtered.length > 0 && filtered.every(item => selected.has(item.sessionId))
       const restorableSelected = [...selected].filter(id => items.some(item => item.sessionId === id && !item.ghost))
+
+      const batchVisible = useMemo(
+        () => filterBatchItems(batchItems ?? [], { query: batchQuery, sort: batchSort }),
+        [batchItems, batchQuery, batchSort],
+      )
+      const batchAllSelected = batchVisible.length > 0
+        && batchVisible.every(item => batchSelected.has(item.sessionId))
+      const batchOpenSelected = (batchItems ?? []).filter(item => !item.archived && batchSelected.has(item.sessionId))
+      const batchArchivedSelected = (batchItems ?? []).filter(item => item.archived && batchSelected.has(item.sessionId))
+      const batchFailureIds = new Set(batchFailures.map(failure => failure.sessionId))
+      const batchNeedsConfirm = batchOpenSelected.some(candidate => batchFailureIds.has(candidate.sessionId))
+
+      useEffect(() => {
+        setBatchSelected(previous => {
+          const loaded = new Set((batchItems ?? []).map(item => item.sessionId))
+          const next = new Set([...previous].filter(id => loaded.has(id)))
+          return next.size === previous.size ? previous : next
+        })
+      }, [batchItems])
 
       const reload = () => setReloadKey(key => key + 1)
 
@@ -919,21 +1084,22 @@ window.__ModuleLoader__.load({
         }
       }
 
-      const openCandidates = () => {
-        setCandidatesOpen(true)
-        setCandidates(null)
-        setCandidateSelected(new Set())
-        setCandidateFailures([])
-        setConfirmStop(false)
-        post('candidates', {}).then(data => {
-          setCandidates({ items: Array.isArray(data.items) ? data.items : [] })
-        }).catch(error => {
-          setCandidates({ items: [], error: error.message || tr('loadFailed') })
+      const reloadBatch = () => setBatchReloadKey(key => key + 1)
+
+      const toggleBatchAll = () => {
+        setBatchSelected(previous => {
+          const next = new Set(previous)
+          if (batchAllSelected) {
+            for (const candidate of batchVisible) next.delete(candidate.sessionId)
+          } else {
+            for (const candidate of batchVisible) next.add(candidate.sessionId)
+          }
+          return next
         })
       }
 
-      const toggleCandidate = (sessionId) => {
-        setCandidateSelected(previous => {
+      const toggleBatchOne = (sessionId) => {
+        setBatchSelected(previous => {
           const next = new Set(previous)
           if (next.has(sessionId)) next.delete(sessionId)
           else next.add(sessionId)
@@ -941,17 +1107,21 @@ window.__ModuleLoader__.load({
         })
       }
 
-      const archiveCandidates = async (stopActivity) => {
-        if (candidateBusy) return
-        const chosen = (candidates?.items ?? [])
-          .filter(item => !item.archived && candidateSelected.has(item.sessionId))
-          .map(item => item.sessionId)
+      const clearBatchSelection = () => {
+        setBatchSelected(new Set())
+        setBatchFailures([])
+        setBatchConfirmStop(false)
+      }
+
+      const archiveBatch = async (stopActivity) => {
+        if (batchBusy) return
+        const chosen = batchOpenSelected.map(candidate => candidate.sessionId)
         if (chosen.length === 0) return
-        if (stopActivity && !confirmStop) {
+        if (stopActivity && !batchConfirmStop) {
           setNotice(tr('reasonConfirmationRequired'))
           return
         }
-        setCandidateBusy(true)
+        setBatchBusy(true)
         try {
           const body = { sessionIds: chosen }
           if (stopActivity) {
@@ -961,23 +1131,13 @@ window.__ModuleLoader__.load({
           const data = await post('archive-many', body)
           const failed = Array.isArray(data.failed) ? data.failed : []
           const active = failed.filter(item => item.reason === 'active')
-          setCandidateFailures(active)
           const archived = Array.isArray(data.archived) ? data.archived : []
-          if (archived.length > 0) {
-            setCandidates(previous => previous
-              ? {
-                ...previous,
-                items: previous.items.map(item => archived.includes(item.sessionId)
-                  ? { ...item, archived: true, active: false, activity: [] }
-                  : item),
-              }
-              : previous)
-          }
-          setCandidateSelected(new Set(active.map(failure => failure.sessionId)))
+          setBatchFailures(active)
+          setBatchSelected(new Set(active.map(failure => failure.sessionId)))
           if (failed.length === 0) {
-            setCandidatesOpen(false)
-            setConfirmStop(false)
+            setBatchConfirmStop(false)
             setNotice(`${tr('batchArchived')} ${archived.length}`)
+            reloadBatch()
           } else {
             setNotice(tr('batchFailed'))
           }
@@ -985,8 +1145,44 @@ window.__ModuleLoader__.load({
         } catch (error) {
           setNotice(error.message || tr('batchFailed'))
         } finally {
-          setCandidateBusy(false)
+          setBatchBusy(false)
         }
+      }
+
+      const restoreBatch = async () => {
+        if (batchBusy) return
+        const chosen = batchArchivedSelected.map(candidate => candidate.sessionId)
+        if (chosen.length === 0) return
+        setBatchBusy(true)
+        try {
+          const data = await post('unarchive-many', { sessionIds: chosen })
+          const restored = Array.isArray(data.restored) ? data.restored : []
+          const failed = Array.isArray(data.failed) ? data.failed : []
+          setBatchFailures([])
+          setBatchConfirmStop(false)
+          setBatchSelected(new Set([
+            ...batchOpenSelected.map(candidate => candidate.sessionId),
+            ...failed.map(failure => failure.sessionId),
+          ]))
+          setNotice(failed.length === 0
+            ? `${tr('batchRestored')} ${restored.length}`
+            : tr('partialRestore'))
+          reloadBatch()
+          reload()
+        } catch (error) {
+          setNotice(error.message || tr('restoreFailed'))
+        } finally {
+          setBatchBusy(false)
+        }
+      }
+
+      const exportBatch = () => {
+        const chosen = (batchItems ?? []).filter(candidate => batchSelected.has(candidate.sessionId))
+        if (chosen.length === 0) return
+        chosen.forEach((candidate, index) => {
+          setTimeout(() => exportSession(candidate.sessionId), index * 350)
+        })
+        setNotice(`${tr('exportStarted')} · ${tr('exportHint')}`)
       }
 
       const data = preview?.data
@@ -998,7 +1194,6 @@ window.__ModuleLoader__.load({
       const latestArchived = summary?.latestArchivedAt
       const count = summary?.count ?? items.length
 
-      const candidateItems = candidates?.items ?? []
       const activityLabels = (activity) => {
         const out = []
         for (const group of Array.isArray(activity) ? activity : []) {
@@ -1016,133 +1211,386 @@ window.__ModuleLoader__.load({
         h('strong', { title: typeof value === 'string' ? value : undefined }, value),
         h('span', null, label))
 
+      const renderBatch = () => {
+        const rangeOptions = [
+          ['all', tr('rangeAll')],
+          ['24h', tr('range24h')],
+          ['7d', tr('range7d')],
+          ['30d', tr('range30d')],
+          ['90d', tr('range90d')],
+        ]
+        const sortOptions = [
+          ['active-desc', tr('batchSortRecent')],
+          ['created-desc', tr('batchSortCreated')],
+          ['title', tr('batchSortTitle')],
+        ]
+        const stateOptions = [
+          ['open', tr('batchStateOpen')],
+          ['archived', tr('batchStateArchived')],
+          ['all', tr('batchStateAll')],
+        ]
+        const failureTitle = (sessionId) => batchItems?.find(candidate => candidate.sessionId === sessionId)?.title || sessionId
+        return h('div', { className: 'dkam-batch' },
+          h('div', { className: 'dkam-batch-filters' },
+            h('label', { className: 'dkam-search' },
+              h(SearchIcon),
+              h('input', {
+                type: 'search',
+                value: batchQuery,
+                placeholder: tr('batchSearchPlaceholder'),
+                'aria-label': tr('batchSearchPlaceholder'),
+                onChange: event => setBatchQuery(event.target.value),
+              }),
+            ),
+            h('label', { className: 'dkam-filter' },
+              h('span', null, tr('timeRange')),
+              h('select', {
+                className: 'dkam-select',
+                value: batchRange,
+                'aria-label': tr('timeRange'),
+                onChange: event => setBatchRange(event.target.value),
+              }, rangeOptions.map(([value, label]) => h('option', { value, key: value }, label))),
+            ),
+            h('label', { className: 'dkam-filter' },
+              h('span', null, tr('timeBasis')),
+              h('select', {
+                className: 'dkam-select',
+                value: batchBasis,
+                'aria-label': tr('timeBasis'),
+                onChange: event => setBatchBasis(event.target.value),
+              },
+                h('option', { value: 'activity' }, tr('basisActivity')),
+                h('option', { value: 'created' }, tr('basisCreated')),
+              ),
+            ),
+            h('div', { className: 'dkam-filter' },
+              h('span', null, tr('batchState')),
+              h('div', { className: 'dkam-seg', role: 'group', 'aria-label': tr('batchState') },
+                stateOptions.map(([value, label]) => h('button', {
+                  type: 'button',
+                  key: value,
+                  'data-active': batchState === value ? 'true' : 'false',
+                  'aria-pressed': batchState === value,
+                  onClick: () => setBatchState(value),
+                }, label)),
+              ),
+            ),
+          ),
+          h('div', { className: 'dkam-batch-bar' },
+            h('label', { className: 'dkam-check' },
+              h('input', {
+                type: 'checkbox',
+                checked: batchAllSelected,
+                disabled: batchVisible.length === 0,
+                onChange: toggleBatchAll,
+              }),
+              tr('selectAll'),
+            ),
+            h('span', { className: 'dkam-selected' }, `${batchSelected.size} ${tr('selectedCount')}`),
+            batchMeta?.truncatedOpen || batchMeta?.truncatedArchived
+              ? h('span', { className: 'dkam-hint' }, tr('batchTruncated'))
+              : null,
+            batchLoading ? h('span', { className: 'dkam-spinner' }) : null,
+            h('select', {
+              className: 'dkam-select',
+              value: batchSort,
+              'aria-label': tr('batchSortRecent'),
+              onChange: event => setBatchSort(event.target.value),
+            }, sortOptions.map(([value, label]) => h('option', { value, key: value }, label))),
+          ),
+          h('div', { className: 'dkam-batch-scroll' },
+            batchError
+              ? h('div', { className: 'dkam-empty dkam-error' },
+                h(ArchiveIcon, { size: 38 }),
+                h('h2', null, tr('loadFailed')),
+                h('p', null, batchError),
+                h('button', { className: 'dkam-btn', onClick: reloadBatch }, tr('retry')),
+              )
+              : batchLoading || batchItems === null
+                ? h('div', { className: 'dkam-batch-list' },
+                  Array.from({ length: 6 }, (_, index) => h('div', { className: 'dkam-skeleton', key: index })))
+                : batchVisible.length === 0
+                  ? h('div', { className: 'dkam-empty' },
+                    h(ArchiveIcon, { size: 38 }),
+                    h('h2', null, tr('batchEmptyTitle')),
+                    h('p', null, tr('batchEmptyHint')),
+                    h('div', { className: 'dkam-empty-actions' },
+                      batchRange !== 'all' ? h('button', {
+                        className: 'dkam-btn',
+                        onClick: () => setBatchRange('all'),
+                      }, tr('batchUseAllTime')) : null,
+                      batchState !== 'all' ? h('button', {
+                        className: 'dkam-btn',
+                        onClick: () => setBatchState('all'),
+                      }, tr('batchUseAllStates')) : null,
+                    ),
+                  )
+                  : h('div', { className: 'dkam-batch-list' }, batchVisible.map(candidate => {
+                    const checked = batchSelected.has(candidate.sessionId)
+                    const activity = activityLabels(candidate.activity)
+                    return h('div', {
+                      className: 'dkam-batch-row',
+                      key: candidate.sessionId,
+                      'data-selected': checked ? 'true' : 'false',
+                      'data-archived': candidate.archived ? 'true' : 'false',
+                    },
+                      h('input', {
+                        type: 'checkbox',
+                        checked,
+                        onChange: () => toggleBatchOne(candidate.sessionId),
+                        'aria-label': candidate.title || tr('unknownTitle'),
+                      }),
+                      h('div', {
+                        className: 'dkam-batch-row-main',
+                        role: 'button',
+                        tabIndex: 0,
+                        onClick: () => toggleBatchOne(candidate.sessionId),
+                        onKeyDown: event => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            toggleBatchOne(candidate.sessionId)
+                          }
+                        },
+                      },
+                        h('div', { className: 'dkam-batch-row-title' },
+                          h('span', { className: 'dkam-batch-title-text' }, candidate.title || tr('unknownTitle')),
+                          candidate.archived
+                            ? h('span', { className: 'dkam-pill' }, tr('candidateArchived'))
+                            : candidate.active
+                              ? h('span', { className: 'dkam-pill dkam-pill-warn' }, tr('candidateActive'))
+                              : h('span', { className: 'dkam-pill' }, tr('candidateIdle')),
+                        ),
+                        h('div', { className: 'dkam-batch-row-sub' },
+                          candidate.workspaceTitle || tr('unfiled'),
+                          ' · ',
+                          `${tr('createdAt')} ${formatTime(candidate.createdAt)}`,
+                        ),
+                        activity.length > 0 ? h('div', { className: 'dkam-batch-row-activity' },
+                          activity.map((label, index) => h('span', {
+                            className: 'dkam-activity-chip',
+                            key: `${candidate.sessionId}-${index}`,
+                          }, label)),
+                        ) : null,
+                      ),
+                      h('div', { className: 'dkam-batch-side' },
+                        h('div', null, formatTime(candidate.lastActivityAt ?? candidate.createdAt)),
+                        h('div', { className: 'dkam-hint' }, tr('lastActive')),
+                      ),
+                    )
+                  })),
+          ),
+          batchFailures.length > 0
+            ? h('div', { className: 'dkam-batch-warn dkam-warn-box' },
+              h('h3', null, tr('batchActiveWarn')),
+              h('p', null, tr('candidateActiveHint')),
+              h('ul', null,
+                batchFailures.map(failure => h('li', { key: failure.sessionId },
+                  failureTitle(failure.sessionId),
+                  activityLabels(failure.activity).length > 0
+                    ? ` — ${activityLabels(failure.activity).join(', ')}`
+                    : '',
+                )),
+              ),
+              h('label', { className: 'dkam-check', style: { marginTop: '8px' } },
+                h('input', {
+                  type: 'checkbox',
+                  checked: batchConfirmStop,
+                  onChange: event => setBatchConfirmStop(event.target.checked),
+                }),
+                tr('confirmStop'),
+              ),
+            )
+            : null,
+          h('div', { className: 'dkam-batch-foot' },
+            h('div', { className: 'dkam-batch-summary' },
+              h('strong', null, String(batchSelected.size)),
+              h('span', null, tr('selectedCount')),
+              h('span', { className: 'dkam-hint' },
+                [
+                  batchOpenSelected.length > 0 ? `${batchOpenSelected.length} ${tr('batchOpenSelected')}` : '',
+                  batchArchivedSelected.length > 0 ? `${batchArchivedSelected.length} ${tr('batchArchivedSelected')}` : '',
+                  batchMeta ? `${tr('batchLoaded')} ${batchMeta.total}` : '',
+                ].filter(Boolean).join(' · ')),
+            ),
+            h('div', { className: 'dkam-batch-actions' },
+              h('button', {
+                className: 'dkam-btn dkam-btn-quiet',
+                onClick: clearBatchSelection,
+                disabled: batchSelected.size === 0,
+              }, tr('batchClearSelection')),
+              h('button', {
+                className: 'dkam-btn',
+                onClick: exportBatch,
+                disabled: batchBusy || batchSelected.size === 0,
+              }, tr('exportSelected')),
+              h('button', {
+                className: 'dkam-btn',
+                onClick: restoreBatch,
+                disabled: batchBusy || batchArchivedSelected.length === 0,
+              }, tr('restoreSelected')),
+              batchNeedsConfirm
+                ? h('button', {
+                  className: 'dkam-btn dkam-btn-primary',
+                  onClick: () => archiveBatch(true),
+                  disabled: batchBusy || !batchConfirmStop || batchOpenSelected.length === 0,
+                }, tr('stopAndArchive'))
+                : h('button', {
+                  className: 'dkam-btn dkam-btn-primary',
+                  onClick: () => archiveBatch(false),
+                  disabled: batchBusy || batchOpenSelected.length === 0,
+                }, tr('archiveSelected')),
+            ),
+          ),
+        )
+      }
+
       return h('div', { className: 'dkam-root' },
         h('header', { className: 'dkam-head' },
           h('div', { className: 'dkam-head-row' },
             h('div', { className: 'dkam-head-copy' },
               h('h1', null, tr('title')),
-              h('p', null, tr('subtitle')),
+              h('p', null, mode === 'batch' ? tr('batchDesc') : tr('subtitle')),
             ),
-            h('button', {
-              className: 'dkam-btn dkam-btn-quiet',
-              onClick: reload,
-              disabled: loading,
-              title: tr('refresh'),
-            }, h(RefreshIcon), tr('refresh')),
-          ),
-          h('div', { className: 'dkam-stats' },
-            statCard(tr('statArchived'), String(count), 'count'),
-            statCard(tr('statSize'), knownSizes > 0 ? formatBytes(totalSize) : '—', 'size'),
-            statCard(tr('statUnknownTime'), String(summary?.unknownArchivedAtCount ?? 0), 'unknown'),
-            statCard(tr('statLastArchived'), latestArchived ? formatTime(latestArchived) : '—', 'latest'),
-          ),
-          h('div', { className: 'dkam-size-note' },
-            tr('sizeNote'),
-            unknownSizes > 0 ? ` · ${unknownSizes} ${tr('unknownSize')}` : '',
-          ),
-          h('div', { className: 'dkam-toolbar' },
-            h('label', { className: 'dkam-search' },
-              h(SearchIcon),
-              h('input', {
-                type: 'search',
-                value: query,
-                placeholder: tr('searchPlaceholder'),
-                'aria-label': tr('searchPlaceholder'),
-                onChange: event => setQuery(event.target.value),
-              }),
-            ),
-            h('select', {
-              className: 'dkam-select',
-              value: filter,
-              'aria-label': tr('filterAll'),
-              onChange: event => setFilter(event.target.value),
-            },
-              h('option', { value: 'all' }, tr('filterAll')),
-              h('option', { value: 'noted' }, tr('filterNoted')),
-              h('option', { value: 'tagged' }, tr('filterTagged')),
-              h('option', { value: 'unknown' }, tr('filterUnknown')),
-              h('option', { value: 'ghost' }, tr('filterGhost')),
-            ),
-            h('select', {
-              className: 'dkam-select',
-              value: sort,
-              'aria-label': tr('sortArchivedDesc'),
-              onChange: event => setSort(event.target.value),
-            },
-              h('option', { value: 'archived-desc' }, tr('sortArchivedDesc')),
-              h('option', { value: 'archived-asc' }, tr('sortArchivedAsc')),
-              h('option', { value: 'active-desc' }, tr('sortActiveDesc')),
-              h('option', { value: 'size-desc' }, tr('sortSizeDesc')),
-              h('option', { value: 'title' }, tr('sortTitle')),
-            ),
-            h('div', { className: 'dkam-toolbar-actions' },
-              h('button', {
-                className: 'dkam-btn',
-                onClick: openCandidates,
-                disabled: Boolean(busy),
-              }, tr('batchArchive')),
-              h('label', { className: 'dkam-check' },
-                h('input', { type: 'checkbox', checked: allSelected, onChange: toggleAll }),
-                tr('selectAll'),
+            h('div', { className: 'dkam-head-actions' },
+              h('div', { className: 'dkam-tabs', role: 'tablist' },
+                h('button', {
+                  className: 'dkam-tab',
+                  role: 'tab',
+                  'aria-selected': mode === 'library',
+                  'data-active': mode === 'library' ? 'true' : 'false',
+                  onClick: () => setMode('library'),
+                }, tr('tabArchive')),
+                h('button', {
+                  className: 'dkam-tab',
+                  role: 'tab',
+                  'aria-selected': mode === 'batch',
+                  'data-active': mode === 'batch' ? 'true' : 'false',
+                  onClick: () => setMode('batch'),
+                }, tr('tabBatch')),
               ),
-              selected.size > 0 ? h('span', { className: 'dkam-selected' }, `${selected.size} ${tr('selectedCount')}`) : null,
               h('button', {
-                className: 'dkam-btn',
-                onClick: restoreSelected,
-                disabled: Boolean(busy) || restorableSelected.length === 0,
-              }, tr('restoreSelected')),
-              h('button', {
-                className: 'dkam-btn',
-                onClick: exportSelected,
-                disabled: selected.size === 0,
-              }, tr('exportSelected')),
+                className: 'dkam-btn dkam-btn-quiet',
+                onClick: mode === 'batch' ? reloadBatch : reload,
+                disabled: mode === 'batch' ? batchLoading : loading,
+                title: tr('refresh'),
+              }, h(RefreshIcon), tr('refresh')),
             ),
           ),
-          h('div', { className: 'dkam-viewbar' },
-            h('select', {
-              className: 'dkam-select',
-              value: viewId,
-              'aria-label': tr('views'),
-              onChange: event => applyView(event.target.value),
-            },
-              h('option', { value: '' }, tr('allViews')),
-              views.map(view => h('option', { value: view.id, key: view.id }, view.name)),
+          mode === 'library' ? h('div', { className: 'dkam-library-head' },
+            h('div', { className: 'dkam-stats' },
+              statCard(tr('statArchived'), String(count), 'count'),
+              statCard(tr('statSize'), knownSizes > 0 ? formatBytes(totalSize) : '—', 'size'),
+              statCard(tr('statUnknownTime'), String(summary?.unknownArchivedAtCount ?? 0), 'unknown'),
+              statCard(tr('statLastArchived'), latestArchived ? formatTime(latestArchived) : '—', 'latest'),
             ),
-            h('button', {
-              className: 'dkam-btn dkam-btn-quiet',
-              onClick: () => { setViewEditorOpen(open => !open); setViewName('') },
-            }, tr('saveView')),
-            viewId ? h('button', {
-              className: 'dkam-btn dkam-btn-quiet',
-              onClick: deleteView,
-              disabled: viewBusy,
-            }, tr('deleteView')) : null,
-          ),
-          viewEditorOpen ? h('div', { className: 'dkam-view-editor' },
-            h('input', {
-              value: viewName,
-              maxLength: 40,
-              placeholder: tr('viewNamePlaceholder'),
-              'aria-label': tr('viewName'),
-              onChange: event => setViewName(event.target.value),
-              onKeyDown: event => { if (event.key === 'Enter') saveView() },
-            }),
-            h('button', {
-              className: 'dkam-btn dkam-btn-primary',
-              onClick: saveView,
-              disabled: viewBusy || viewName.trim().length === 0,
-            }, tr('saveView')),
-            h('button', {
-              className: 'dkam-btn dkam-btn-quiet',
-              onClick: () => { setViewEditorOpen(false); setViewName('') },
-            }, tr('close')),
-          ) : null,
-          tag ? h('div', { className: 'dkam-active-filter' },
-            h('span', null, `${tr('tags')}: ${tag}`),
-            h('button', { type: 'button', onClick: () => setTag('') }, tr('clearTag')),
+            h('div', { className: 'dkam-size-note' },
+              tr('sizeNote'),
+              unknownSizes > 0 ? ` · ${unknownSizes} ${tr('unknownSize')}` : '',
+            ),
+            h('div', { className: 'dkam-toolbar' },
+              h('label', { className: 'dkam-search' },
+                h(SearchIcon),
+                h('input', {
+                  type: 'search',
+                  value: query,
+                  placeholder: tr('searchPlaceholder'),
+                  'aria-label': tr('searchPlaceholder'),
+                  onChange: event => setQuery(event.target.value),
+                }),
+              ),
+              h('select', {
+                className: 'dkam-select',
+                value: filter,
+                'aria-label': tr('filterAll'),
+                onChange: event => setFilter(event.target.value),
+              },
+                h('option', { value: 'all' }, tr('filterAll')),
+                h('option', { value: 'noted' }, tr('filterNoted')),
+                h('option', { value: 'tagged' }, tr('filterTagged')),
+                h('option', { value: 'unknown' }, tr('filterUnknown')),
+                h('option', { value: 'ghost' }, tr('filterGhost')),
+              ),
+              h('select', {
+                className: 'dkam-select',
+                value: sort,
+                'aria-label': tr('sortArchivedDesc'),
+                onChange: event => setSort(event.target.value),
+              },
+                h('option', { value: 'archived-desc' }, tr('sortArchivedDesc')),
+                h('option', { value: 'archived-asc' }, tr('sortArchivedAsc')),
+                h('option', { value: 'active-desc' }, tr('sortActiveDesc')),
+                h('option', { value: 'size-desc' }, tr('sortSizeDesc')),
+                h('option', { value: 'title' }, tr('sortTitle')),
+              ),
+              h('div', { className: 'dkam-toolbar-actions' },
+                h('button', {
+                  className: 'dkam-btn',
+                  onClick: () => setMode('batch'),
+                  disabled: Boolean(busy),
+                }, tr('batchArchive')),
+                h('label', { className: 'dkam-check' },
+                  h('input', { type: 'checkbox', checked: allSelected, onChange: toggleAll }),
+                  tr('selectAll'),
+                ),
+                selected.size > 0 ? h('span', { className: 'dkam-selected' }, `${selected.size} ${tr('selectedCount')}`) : null,
+                h('button', {
+                  className: 'dkam-btn',
+                  onClick: restoreSelected,
+                  disabled: Boolean(busy) || restorableSelected.length === 0,
+                }, tr('restoreSelected')),
+                h('button', {
+                  className: 'dkam-btn',
+                  onClick: exportSelected,
+                  disabled: selected.size === 0,
+                }, tr('exportSelected')),
+              ),
+            ),
+            h('div', { className: 'dkam-viewbar' },
+              h('select', {
+                className: 'dkam-select',
+                value: viewId,
+                'aria-label': tr('views'),
+                onChange: event => applyView(event.target.value),
+              },
+                h('option', { value: '' }, tr('allViews')),
+                views.map(view => h('option', { value: view.id, key: view.id }, view.name)),
+              ),
+              h('button', {
+                className: 'dkam-btn dkam-btn-quiet',
+                onClick: () => { setViewEditorOpen(open => !open); setViewName('') },
+              }, tr('saveView')),
+              viewId ? h('button', {
+                className: 'dkam-btn dkam-btn-quiet',
+                onClick: deleteView,
+                disabled: viewBusy,
+              }, tr('deleteView')) : null,
+            ),
+            viewEditorOpen ? h('div', { className: 'dkam-view-editor' },
+              h('input', {
+                value: viewName,
+                maxLength: 40,
+                placeholder: tr('viewNamePlaceholder'),
+                'aria-label': tr('viewName'),
+                onChange: event => setViewName(event.target.value),
+                onKeyDown: event => { if (event.key === 'Enter') saveView() },
+              }),
+              h('button', {
+                className: 'dkam-btn dkam-btn-primary',
+                onClick: saveView,
+                disabled: viewBusy || viewName.trim().length === 0,
+              }, tr('saveView')),
+              h('button', {
+                className: 'dkam-btn dkam-btn-quiet',
+                onClick: () => { setViewEditorOpen(false); setViewName('') },
+              }, tr('close')),
+            ) : null,
+            tag ? h('div', { className: 'dkam-active-filter' },
+              h('span', null, `${tr('tags')}: ${tag}`),
+              h('button', { type: 'button', onClick: () => setTag('') }, tr('clearTag')),
+            ) : null,
           ) : null,
         ),
-        h('div', { className: 'dkam-scroll' },
+        mode === 'library' ? h('div', { className: 'dkam-scroll' },
           loading && items.length === 0
             ? h('div', { className: 'dkam-list' }, Array.from({ length: 6 }, (_, index) => h('div', { className: 'dkam-skeleton', key: index })))
             : loadError
@@ -1237,7 +1685,7 @@ window.__ModuleLoader__.load({
                       ),
                     )
                   })),
-        ),
+        ) : renderBatch(),
         h('dialog', {
           ref: dialogRef,
           className: 'dkam-dialog',
@@ -1406,113 +1854,6 @@ window.__ModuleLoader__.load({
               onClick: () => item && restoreOne(item),
               disabled: !item || item.ghost || Boolean(busy),
             }, tr('restore')),
-          ),
-        ),
-        h('dialog', {
-          ref: candidateDialogRef,
-          className: 'dkam-dialog',
-          onClose: () => setCandidatesOpen(false),
-          'aria-labelledby': 'dkam-candidate-title',
-        },
-          h('div', { className: 'dkam-dialog-head' },
-            h('div', null,
-              h('h2', { className: 'dkam-dialog-title', id: 'dkam-candidate-title' }, tr('batchTitle')),
-              h('p', { className: 'dkam-dialog-sub' }, tr('batchDesc')),
-            ),
-            h('button', {
-              className: 'dkam-x',
-              onClick: () => setCandidatesOpen(false),
-              'aria-label': tr('close'),
-            }, '×'),
-          ),
-          h('div', { className: 'dkam-dialog-body' },
-            candidates === null
-              ? h('div', { className: 'dkam-empty' },
-                h('span', { className: 'dkam-spinner' }),
-                h('p', null, tr('candidateLoading')),
-              )
-              : candidates.error
-                ? h('div', { className: 'dkam-empty dkam-error' }, h('p', null, candidates.error))
-                : candidateItems.length === 0
-                  ? h('div', { className: 'dkam-empty' }, h('p', null, tr('candidateEmpty')))
-                  : h('div', { className: 'dkam-candidate-list' },
-                    candidateItems.map(candidate => h('div', {
-                      className: 'dkam-candidate-row',
-                      key: candidate.sessionId,
-                      'data-archived': candidate.archived ? 'true' : 'false',
-                    },
-                      h('input', {
-                        type: 'checkbox',
-                        checked: candidateSelected.has(candidate.sessionId),
-                        disabled: candidate.archived,
-                        onChange: () => toggleCandidate(candidate.sessionId),
-                        'aria-label': candidate.title || candidate.sessionId,
-                      }),
-                      h('div', { className: 'dkam-candidate-main' },
-                        h('div', { className: 'dkam-candidate-title' },
-                          h('span', null, candidate.title || tr('unknownTitle')),
-                          candidate.archived
-                            ? h('span', { className: 'dkam-pill' }, tr('candidateArchived'))
-                            : candidate.active
-                              ? h('span', { className: 'dkam-pill dkam-pill-warn' }, tr('candidateActive'))
-                              : h('span', { className: 'dkam-pill' }, tr('candidateIdle')),
-                        ),
-                        h('div', { className: 'dkam-candidate-sub' },
-                          candidate.workspaceTitle || tr('unfiled'),
-                          ' · ',
-                          formatTime(candidate.createdAt),
-                        ),
-                        candidate.active ? h('div', { className: 'dkam-candidate-activity' },
-                          activityLabels(candidate.activity).map((label, index) => h('span', {
-                            className: 'dkam-activity-chip',
-                            key: `${candidate.sessionId}-${index}`,
-                          }, label)),
-                        ) : null,
-                      ),
-                      h('div', { className: 'dkam-hint' },
-                        candidate.archived ? tr('candidateArchived') : ''),
-                    )),
-                  ),
-            candidateFailures.length > 0
-              ? h('div', { className: 'dkam-warn-box' },
-                h('h3', null, tr('batchFailed')),
-                h('p', null, tr('candidateActiveHint')),
-                h('ul', null,
-                  candidateFailures.map(failure => h('li', { key: failure.sessionId },
-                    candidateItems.find(candidate => candidate.sessionId === failure.sessionId)?.title
-                      || failure.sessionId,
-                    activityLabels(failure.activity).length > 0
-                      ? ` — ${activityLabels(failure.activity).join(', ')}`
-                      : '',
-                  )),
-                ),
-                h('label', { className: 'dkam-check', style: { marginTop: '8px' } },
-                  h('input', {
-                    type: 'checkbox',
-                    checked: confirmStop,
-                    onChange: event => setConfirmStop(event.target.checked),
-                  }),
-                  tr('confirmStop'),
-                ),
-              )
-              : null,
-          ),
-          h('div', { className: 'dkam-dialog-foot' },
-            h('button', {
-              className: 'dkam-btn dkam-btn-quiet',
-              onClick: () => setCandidatesOpen(false),
-            }, tr('close')),
-            candidateFailures.length > 0
-              ? h('button', {
-                className: 'dkam-btn dkam-btn-primary',
-                onClick: () => archiveCandidates(true),
-                disabled: candidateBusy || !confirmStop || candidateSelected.size === 0,
-              }, tr('stopAndArchive'))
-              : h('button', {
-                className: 'dkam-btn dkam-btn-primary',
-                onClick: () => archiveCandidates(false),
-                disabled: candidateBusy || candidateSelected.size === 0,
-              }, tr('archiveSelected')),
           ),
         ),
         notice ? h('div', { className: 'dkam-toast', role: 'status' }, notice) : null,

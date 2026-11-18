@@ -28,9 +28,14 @@ without changing the built-in archive set or deleting any data.
 - **Saved views** — save the current search, filter, sort, and tag as a named
   view (up to 50); apply or delete it from the toolbar. Views live in a separate
   v1 domain so the entries schema needs no migration.
-- **Batch archive / candidate pool** — lists idle, active, and already archived
-  sessions. Active rows show the reported activity; the Host refuses to stop or
-  archive them until the user explicitly confirms. No silent `stopActivity`.
+- **Batch workspace** — a dedicated tab, not a modal. Filter the candidate pool
+  by time range (past 24 hours / 7 / 30 / 90 days or all time), time basis
+  (last activity or created), and state (open, archived, or both); then search,
+  sort, and select the exact rows to archive, restore, or export from a sticky
+  footer. The Host applies time and state filters before capping the pool, so
+  narrowing the range reveals older sessions instead of hiding them behind the
+  first page. Active rows show the reported activity; the Host refuses to stop
+  or archive them until the user explicitly confirms. No silent `stopActivity`.
 - **Restore** — one session or a selection, through
   `workspaceRegistry.unarchiveSession`.
 - **Capacity** — summed session-log size and unknown-size count. Attachment
@@ -107,6 +112,15 @@ syntax-checked by `npm run check`.
 - Batch candidates call the public `workspace/session-activity` waterfall to
   label active rows. The actual archive call never passes `stopActivity` unless
   the user confirmed; the Host's own activity refusal is the final guard.
+- `candidates` accepts `range` (`all`, `24h`, `7d`, `30d`, `90d`), `basis`
+  (`activity` or `created`), and `state` (`all`, `open`, `archived`). It filters
+  before slicing up to 200 open and 100 archived rows, and returns
+  `openTotal`, `archivedTotal`, `total`, `truncatedOpen`, and
+  `truncatedArchived` so the Client can say when a range is still too broad.
+  The activity basis uses the session log's mtime because session headers do
+  not carry an activity timestamp; if the log cannot be located, it falls back
+  to `createdAt`. Search and sort inside the batch workspace are local to the
+  loaded rows.
 - The Client talks to the Host with `fetch` and registers into the `main` and
   `sidebar.panellist` slots. It does not depend on internal Client services.
   The archive-notice waterfall can only change the toast text/tone, so the
@@ -130,5 +144,6 @@ syntax-checked by `npm run check`.
   deliberately does not reach into the private workspace store.
 - The archive notice can only change `text` and `tone`; it cannot add an
   action button. The added timestamp is therefore informational.
-- The candidate pool returns up to 120 open sessions and up to 40 archived
-  rows; the archived count still covers the complete archive set.
+- The candidate pool returns up to 200 open sessions and up to 100 archived
+  rows after time/state filtering; `openTotal` and `archivedTotal` still cover
+  the complete matching set, and the Client warns when either cap truncates it.
