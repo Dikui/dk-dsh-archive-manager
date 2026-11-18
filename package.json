@@ -1,0 +1,47 @@
+{
+  "name": "dk-dsh-archive-manager",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "An archive center for DeepSeek Harness: browse, annotate, preview, restore, and export archived sessions",
+  "license": "UNLICENSED",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json",
+    "./locale/en.json": "./locale/en.json",
+    "./locale/zh.json": "./locale/zh.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "src/model.js",
+    "src/store.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "README.md",
+    "locale"
+  ],
+  "engines": {
+    "node": ">=22.19.0",
+    "dsh": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3"
+  },
+  "scripts": {
+    "check": "node --check index.js && node --check client.js && node --check src/model.js && node --check src/store.js && node --test test/*.test.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ]
+    }
+  }
+}
