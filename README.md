@@ -36,7 +36,9 @@ without changing the built-in archive set or deleting any data.
   the default oldest-first view surfaces the stalest sessions and the cap keeps
   the rows the chosen order puts first. Active rows show the reported activity;
   the Host refuses to stop or archive them until the user explicitly confirms.
-  No silent `stopActivity`.
+  No silent `stopActivity`. Pinned sessions are left out of the candidate pool
+  entirely, so a bulk action can never archive or restore one by accident; unpin
+  a session in DSH's own sidebar to make it eligible again.
 - **Restore** — one session or a selection, through
   `workspaceRegistry.unarchiveSession`.
 - **Capacity** — summed session-log size and unknown-size count. Attachment
@@ -59,6 +61,8 @@ without changing the built-in archive set or deleting any data.
 - No scheduled or automatic archiving.
 - No silent `stopActivity`. Batch archive refuses active sessions until the
   user confirms; there is no timer, retry, or background stop.
+- No pin management. Pin and unpin stay in DSH's own sidebar; the batch
+  workspace only excludes pinned sessions from its candidate pool.
 - No automatic open after restore. The public Client surface does not expose
   session selection to other plugins, so the UI says to open the restored
   session from the session list.
@@ -94,14 +98,15 @@ syntax-checked by `npm run check`.
 ## How it works
 
 - Host routes: `POST /api/dk-dsh-archive-manager/{list,preview,entry,transcript,
-  candidates,archive-many,unarchive,unarchive-many,views,view-save,view-delete,
-  notice}`. Every route requires same-origin JSON plus the
+  candidates,archive-many,unarchive,unarchive-many,views,view-save,
+  view-delete,notice}`. Every route requires same-origin JSON plus the
   `x-dk-archive-manager: 1` header, caps the body at 256 KiB, and caps a batch
   operation at 200 ids. Transcript pages are capped at 100 rows (40 by
   default); saved views are capped at 50 per profile.
 - The archive set comes from the public
-  `workspaceRegistry.archivedSessionIds` getter, with
-  `workspaceController.follow` as a fallback.
+  `workspaceRegistry.archivedSessionIds` getter, and the pin set from
+  `workspaceRegistry.pinnedSessionIds`, with `workspaceController.follow` as a
+  fallback.
 - Metadata is stored in the `archive_manager` v1 domain KV table `entries`;
   saved views use the separate `archive_manager_views` v1 table `views`. When
   the domain facility is unavailable, both use an atomically written JSON
@@ -115,7 +120,9 @@ syntax-checked by `npm run check`.
   the user confirmed; the Host's own activity refusal is the final guard.
 - `candidates` accepts `range` (`all`, `older7d`, `older30d`, `older90d`),
   `basis` (`activity` or `created`), `state` (`all`, `open`, `archived`), and
-  `sort` (`active-asc`, `active-desc`, `created-desc`). A range keeps sessions
+  `sort` (`active-asc`, `active-desc`, `created-desc`). It removes pinned
+  sessions from the pool before filtering or sorting, so no candidate row is
+  pinned. A range keeps sessions
   whose chosen timestamp is at least that old. It filters and sorts before
   slicing up to 200 open and 100 archived rows, and returns `openTotal`,
   `archivedTotal`, `total`, `truncatedOpen`, and `truncatedArchived` so the
@@ -152,3 +159,6 @@ syntax-checked by `npm run check`.
 - The candidate pool returns up to 200 open sessions and up to 100 archived
   rows after time/state filtering; `openTotal` and `archivedTotal` still cover
   the complete matching set, and the Client warns when either cap truncates it.
+- Pin is a registry-global ordering flag, not an archive exemption. Pinned
+  sessions are excluded from the batch candidate pool, so unpin one in DSH's
+  sidebar if a batch action should see it.

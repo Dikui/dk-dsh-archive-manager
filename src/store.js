@@ -137,18 +137,10 @@ export async function openStore(ctx) {
         const value = table.get(sessionId)
         return value === undefined ? undefined : normalizeEntry(sessionId, value)
       },
-      entries: () => {
-        const out = []
-        for (const [sessionId, value] of table.entries()) out.push([sessionId, normalizeEntry(sessionId, value)])
-        return out
-      },
       async put(sessionId, value) {
         const entry = normalizeEntry(sessionId, value)
         await table.put(sessionId, entry)
         return entry
-      },
-      async delete(sessionId) {
-        return table.delete(sessionId)
       },
       getView: id => {
         if (viewTable === undefined) return undefined
@@ -248,17 +240,11 @@ async function openFileStore(ctx) {
   return {
     kind: 'json',
     get: sessionId => records.get(sessionId),
-    entries: () => [...records.entries()],
     async put(sessionId, value) {
       const entry = normalizeEntry(sessionId, value)
       records.set(sessionId, entry)
       await persist()
       return entry
-    },
-    async delete(sessionId) {
-      const existed = records.delete(sessionId)
-      if (existed) await persist()
-      return existed
     },
     getView: id => savedViews.get(id),
     views: () => [...savedViews.values()],

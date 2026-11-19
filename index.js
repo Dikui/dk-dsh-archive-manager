@@ -200,13 +200,14 @@ function archiveTools(ctx, ready) {
     ])
     const recordById = new Map(records.map(record => [String(record.header.id), record]))
     const workspaceOf = makeWorkspaceLookup(workspaces, recordById)
+    const titleOfSession = titleLookup(titleResults)
     const needle = typeof query === 'string' ? query.trim().toLocaleLowerCase() : ''
     const items = []
     for (const sessionId of ids) {
       const entry = store.get(sessionId)
       const header = recordById.get(sessionId)?.header
       const workspace = workspaceOf(sessionId, header?.cwd)
-      const title = titleOf(titleResults, sessionId)
+      const title = titleOfSession(sessionId)
       if (needle.length > 0) {
         const haystack = [sessionId, title, workspace?.title, entry?.note, ...(entry?.tags ?? [])]
           .filter(Boolean).join('\n').toLocaleLowerCase()
@@ -356,6 +357,7 @@ async function handleList(ctx, storePromise, request) {
     const snapshotById = snapshotMap(ctx, snapshots)
     const workspaceOf = makeWorkspaceLookup(workspaces, recordById)
     const sizes = await mapLimit(ids, 8, sessionId => sizeInfo(snapshotById.get(sessionId)))
+    const titleOfSession = titleLookup(titleResults)
 
     const items = ids.map((sessionId, index) => {
       const record = recordById.get(sessionId)
@@ -365,25 +367,14 @@ async function handleList(ctx, storePromise, request) {
       const workspace = workspaceOf(sessionId, header?.cwd)
       const size = sizes[index]
       return {
-        sessionId,
-        title: titleOf(titleResults, sessionId),
+        ...sessionCore(sessionId, header, workspace, titleOfSession(sessionId)),
         workspaceId: workspace?.id ?? null,
-        workspaceTitle: workspace?.title ?? (typeof header?.cwd === 'string' ? basename(header.cwd) : null),
-        cwd: typeof header?.cwd === 'string' ? header.cwd : null,
-        createdAt: Number.isFinite(header?.createdAt) ? header.createdAt : null,
         lastActivityAt: size.lastActivityAt,
         sizeBytes: size.sizeBytes,
         eventCount: Number.isFinite(snapshot?.eventCount) ? snapshot.eventCount : null,
         parentSession: typeof header?.parentSession === 'string' ? header.parentSession : null,
         ghost: header === undefined,
-        archivedAt: entry?.archivedAt ?? null,
-        archivedAtKnown: entry?.archivedAt !== undefined,
-        inferred: entry?.inferred ?? true,
-        note: entry?.note ?? null,
-        tags: entry?.tags ?? [],
-        source: entry?.source ?? null,
-        restoredAt: entry?.restoredAt ?? null,
-        history: entry?.history ?? [],
+        ...entryMeta(entry, true),
       }
     })
 
@@ -433,25 +424,14 @@ async function handlePreview(ctx, storePromise, request) {
     return json({
       ok: true,
       preview: {
-        sessionId,
-        title: titleOf(titleResults, sessionId),
+        ...sessionCore(sessionId, header, workspace, titleOf(titleResults, sessionId)),
         workspaceId: workspace?.id ?? null,
-        workspaceTitle: workspace?.title ?? (typeof header?.cwd === 'string' ? basename(header.cwd) : null),
-        cwd: typeof header?.cwd === 'string' ? header.cwd : null,
-        createdAt: Number.isFinite(header?.createdAt) ? header.createdAt : null,
         lastActivityAt: size.lastActivityAt,
         sizeBytes: size.sizeBytes,
         eventCount: summary.eventCount,
         parentSession: typeof header?.parentSession === 'string' ? header.parentSession : null,
         ghost: false,
-        archivedAt: entry?.archivedAt ?? null,
-        archivedAtKnown: entry?.archivedAt !== undefined,
-        inferred: entry?.inferred ?? true,
-        note: entry?.note ?? null,
-        tags: entry?.tags ?? [],
-        source: entry?.source ?? null,
-        restoredAt: entry?.restoredAt ?? null,
-        history: entry?.history ?? [],
+        ...entryMeta(entry, true),
         ...summary,
       },
     })
@@ -499,15 +479,7 @@ async function handleEntry(ctx, storePromise, request) {
     const saved = await store.put(sessionId, next)
     return json({
       ok: true,
-      entry: {
-        archivedAt: saved.archivedAt ?? null,
-        archivedAtKnown: saved.archivedAt !== undefined,
-        inferred: saved.inferred,
-        note: saved.note ?? null,
-        tags: saved.tags,
-        restoredAt: saved.restoredAt ?? null,
-        history: saved.history ?? [],
-      },
+      entry: entryMeta(saved),
     })
   } catch (error) {
     ctx.logger?.warn?.('dk-dsh-archive-manager: entry save failed for %s: %o', sessionId, error)
@@ -528,16 +500,13 @@ async function handleUnarchive(ctx, storePromise, request) {
   const { sessionId } = parsed
 
   try {
-    if (!(await archivedIds(ctx)).includes(sessionId)) {
-      return json({ ok: true, restored: [sessionId], failed: [], archivedSessionIds: await archivedIds(ctx) })
-    }
-    await ctx.workspaceRegistry.unarchiveSession(sessionId)
-    await markRestored(ctx, storePromise, sessionId)
+    const archived = new Set(await archivedIds(ctx))
+    await restoreArchivedSession(ctx, storePromise, sessionId, archived)
     return json({
       ok: true,
       restored: [sessionId],
       failed: [],
-      archivedSessionIds: await archivedIds(ctx),
+      archivedSessionIds: [...archived],
     })
   } catch (error) {
     ctx.logger?.warn?.('dk-dsh-archive-manager: unarchive failed for %s: %o', sessionId, error)
@@ -563,14 +532,12 @@ async function handleUnarchiveMany(ctx, storePromise, request) {
   }
 
   const unique = [...new Set(sessionIds)]
+  const archived = new Set(await archivedIds(ctx))
   const restored = []
   const failed = []
   for (const sessionId of unique) {
     try {
-      if ((await archivedIds(ctx)).includes(sessionId)) {
-        await ctx.workspaceRegistry.unarchiveSession(sessionId)
-        await markRestored(ctx, storePromise, sessionId)
-      }
+      await restoreArchivedSession(ctx, storePromise, sessionId, archived)
       restored.push(sessionId)
     } catch (error) {
       ctx.logger?.warn?.('dk-dsh-archive-manager: batch unarchive failed for %s: %o', sessionId, error)
@@ -581,7 +548,7 @@ async function handleUnarchiveMany(ctx, storePromise, request) {
     ok: failed.length === 0,
     restored,
     failed,
-    archivedSessionIds: await archivedIds(ctx),
+    archivedSessionIds: [...archived],
   })
 }
 
@@ -646,19 +613,24 @@ async function handleCandidates(ctx, _storePromise, request) {
     // `locate` is synchronous and avoids a second full persistence scan;
     // `list` remains a fallback for backends that expose snapshot locations.
     const canLocate = typeof ctx.sessionPersistence?.locate === 'function'
-    const [records, archived, workspaces, snapshots] = await Promise.all([
+    const [records, archived, pinned, workspaces, snapshots] = await Promise.all([
       ctx.sessionQuery.listSessions(),
       archivedIds(ctx),
+      pinnedIds(ctx),
       safeList(() => ctx.workspaceRegistry.list()),
       canLocate ? [] : safeList(() => ctx.sessionPersistence.list()),
     ])
     const archivedSet = new Set(archived)
+    const pinnedSet = new Set(pinned)
+    // A pin is the user's keep-as-is signal, so pinned sessions stay out of the
+    // batch pool entirely and no bulk action can archive one by accident.
+    const unpinned = records.filter(record => !pinnedSet.has(String(record.header.id)))
     const workspaceOf = makeWorkspaceLookup(workspaces, new Map(records.map(record => [String(record.header.id), record])))
     const snapshotById = snapshotMap(ctx, snapshots)
 
     // Apply state before timestamps so a state-filtered request never stats
     // sessions it will not show.
-    const inState = state === 'all' ? records : records.filter(record => {
+    const inState = state === 'all' ? unpinned : unpinned.filter(record => {
       const isArchived = archivedSet.has(String(record.header.id))
       return state === 'open' ? !isArchived : isArchived
     })
@@ -666,8 +638,9 @@ async function handleCandidates(ctx, _storePromise, request) {
     // Session headers carry no activity timestamp, so use the session log
     // mtime for activity filtering and activity sorting. Created-only sorting
     // is the one case that needs no stat calls.
+    const needsActivity = basis === 'activity' || sort !== 'created-desc'
     const activityById = new Map()
-    if (basis === 'activity' || sort !== 'created-desc') {
+    if (needsActivity) {
       const times = await mapLimit(inState, 8, record => lastActivityOf(
         ctx,
         record?.header,
@@ -710,15 +683,19 @@ async function handleCandidates(ctx, _storePromise, request) {
       ? byActivityAsc
       : sort === 'created-desc' ? byCreatedDesc : byActivityDesc
     matching.sort(comparator)
-    const openAll = matching.filter(record => !archivedSet.has(String(record.header.id)))
-    const archivedAll = matching.filter(record => archivedSet.has(String(record.header.id)))
+    const openAll = []
+    const archivedAll = []
+    for (const record of matching) {
+      if (archivedSet.has(String(record.header.id))) archivedAll.push(record)
+      else openAll.push(record)
+    }
     const open = openAll.slice(0, MAX_CANDIDATES)
     const archivedRows = archivedAll.slice(0, MAX_ARCHIVED_CANDIDATES)
 
     // Filters run before titles so a very large history cannot crowd the
     // displayed rows out of the title snapshot batch.
     const displayed = [...open, ...archivedRows]
-    const missingActivity = displayed.filter(record => !activityById.has(String(record?.header?.id)))
+    const missingActivity = needsActivity ? [] : displayed.filter(record => !activityById.has(String(record?.header?.id)))
     const [titleResults, activities, missingTimes] = await Promise.all([
       safeList(() => ctx.sessionQuery.readTitleSnapshots(
         displayed.map(record => String(record.header.id)).slice(0, 300),
@@ -734,6 +711,7 @@ async function handleCandidates(ctx, _storePromise, request) {
       const id = String(record?.header?.id)
       if (missingTimes[index] !== null) activityById.set(id, missingTimes[index])
     })
+    const titleOfSession = titleLookup(titleResults)
 
     // Actionable (open) rows come first so a large archive set cannot crowd
     // out the sessions a batch archive can actually act on.
@@ -745,7 +723,7 @@ async function handleCandidates(ctx, _storePromise, request) {
         false,
         activities[index],
         workspaceOf,
-        titleResults,
+        titleOfSession,
         activityById.get(String(record.header.id)),
       ))
     }
@@ -755,7 +733,7 @@ async function handleCandidates(ctx, _storePromise, request) {
         true,
         [],
         workspaceOf,
-        titleResults,
+        titleOfSession,
         activityById.get(String(record.header.id)),
       )))
 
@@ -930,7 +908,7 @@ async function handleViewDelete(ctx, storePromise, request) {
     return json({ ok: true, deleted })
   } catch (error) {
     ctx.logger?.warn?.('dk-dsh-archive-manager: view delete failed: %o', error)
-    return json({ ok: false, reason: 'save-failed' }, 500)
+    return json({ ok: false, reason: 'delete-failed' }, 500)
   }
 }
 
@@ -985,25 +963,58 @@ async function probeActivity(ctx, sessionId) {
 }
 
 /**
+ * Build the session fields shared by list, preview, and candidate rows.
+ * @param {string} sessionId - Session id.
+ * @param {object | undefined} header - Session header.
+ * @param {object | undefined} workspace - Owning workspace.
+ * @param {string | null} title - Resolved title.
+ * @returns {object} Shared session fields.
+ */
+function sessionCore(sessionId, header, workspace, title) {
+  return {
+    sessionId,
+    title,
+    workspaceTitle: workspace?.title ?? (typeof header?.cwd === 'string' ? basename(header.cwd) : null),
+    cwd: typeof header?.cwd === 'string' ? header.cwd : null,
+    createdAt: Number.isFinite(header?.createdAt) ? header.createdAt : null,
+  }
+}
+
+/**
+ * Build the sidecar metadata fields shared by list, preview, and entry saves.
+ * @param {object | undefined} entry - Stored archive entry.
+ * @param {boolean} [includeSource] - Include the archive source field.
+ * @returns {object} Sidecar metadata.
+ */
+function entryMeta(entry, includeSource = false) {
+  return {
+    archivedAt: entry?.archivedAt ?? null,
+    archivedAtKnown: entry?.archivedAt !== undefined,
+    inferred: entry?.inferred ?? true,
+    note: entry?.note ?? null,
+    tags: entry?.tags ?? [],
+    ...(includeSource ? { source: entry?.source ?? null } : {}),
+    restoredAt: entry?.restoredAt ?? null,
+    history: entry?.history ?? [],
+  }
+}
+
+/**
  * Build one candidate row.
  * @param {object} record - Session record.
  * @param {boolean} archived - Whether it is archived.
  * @param {object[]} activity - Activity details.
  * @param {(sessionId: string, cwd?: string) => object | undefined} workspaceOf - Workspace lookup.
- * @param {unknown} titleResults - Title snapshots.
+ * @param {(sessionId: string) => string | null} titleOfSession - Indexed title lookup.
  * @param {number | null | undefined} lastActivityAt - Log-derived activity time.
  * @returns {object} Candidate row.
  */
-function candidateItem(record, archived, activity, workspaceOf, titleResults, lastActivityAt) {
+function candidateItem(record, archived, activity, workspaceOf, titleOfSession, lastActivityAt) {
   const header = record?.header ?? {}
   const sessionId = String(header.id)
   const workspace = workspaceOf(sessionId, header.cwd)
   return {
-    sessionId,
-    title: titleOf(titleResults, sessionId),
-    workspaceTitle: workspace?.title ?? (typeof header.cwd === 'string' ? basename(header.cwd) : null),
-    cwd: typeof header.cwd === 'string' ? header.cwd : null,
-    createdAt: Number.isFinite(header.createdAt) ? header.createdAt : null,
+    ...sessionCore(sessionId, header, workspace, titleOfSession(sessionId)),
     lastActivityAt: Number.isFinite(lastActivityAt)
       ? lastActivityAt
       : (Number.isFinite(header.lastActivityAt) ? header.lastActivityAt : null),
@@ -1011,6 +1022,22 @@ function candidateItem(record, archived, activity, workspaceOf, titleResults, la
     active: activity.length > 0,
     activity,
   }
+}
+
+/**
+ * Restore one archived session and keep the caller's archive set in sync.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @param {Promise<object>} storePromise - Metadata store.
+ * @param {string} sessionId - Session to restore.
+ * @param {Set<string>} archived - Archive set for the current response.
+ * @returns {Promise<boolean>} Whether the session was in the archive set.
+ */
+async function restoreArchivedSession(ctx, storePromise, sessionId, archived) {
+  if (!archived.has(sessionId)) return false
+  await ctx.workspaceRegistry.unarchiveSession(sessionId)
+  archived.delete(sessionId)
+  await markRestored(ctx, storePromise, sessionId)
+  return true
 }
 
 /**
@@ -1039,11 +1066,31 @@ async function markRestored(ctx, storePromise, sessionId) {
  * @returns {Promise<string[]>} Archived session ids in archive order.
  */
 async function archivedIds(ctx) {
+  return registrySessionIds(ctx, 'archivedSessionIds')
+}
+
+/**
+ * The registry-global pin set, most recently pinned first.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @returns {Promise<string[]>} Pinned session ids in pin order.
+ */
+async function pinnedIds(ctx) {
+  return registrySessionIds(ctx, 'pinnedSessionIds')
+}
+
+/**
+ * Read one registry-global session id set. The direct getter is preferred;
+ * `workspaceController.follow` covers a future surface that hides it.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @param {'archivedSessionIds' | 'pinnedSessionIds'} key - Registry field.
+ * @returns {Promise<string[]>} Session ids in registry order.
+ */
+async function registrySessionIds(ctx, key) {
   try {
-    const direct = ctx.workspaceRegistry?.archivedSessionIds
+    const direct = ctx.workspaceRegistry?.[key]
     if (Array.isArray(direct)) return direct.map(String)
   } catch (error) {
-    ctx.logger?.warn?.('dk-dsh-archive-manager: archive getter unavailable: %o', error)
+    ctx.logger?.warn?.('dk-dsh-archive-manager: %s getter unavailable: %o', key, error)
   }
   const controller = ctx.workspaceController
   if (controller !== undefined && typeof controller.follow === 'function') {
@@ -1052,18 +1099,47 @@ async function archivedIds(ctx) {
     try {
       for await (const frame of controller.follow(abort.signal)) {
         if (frame?.type === 'baseline' || frame?.type === 'replace') {
-          const ids = frame.value?.archivedSessionIds
+          const ids = frame.value?.[key]
           if (Array.isArray(ids)) return ids.map(String)
         }
       }
     } catch (error) {
-      ctx.logger?.warn?.('dk-dsh-archive-manager: archive stream unavailable: %o', error)
+      ctx.logger?.warn?.('dk-dsh-archive-manager: %s stream unavailable: %o', key, error)
     } finally {
       clearTimeout(timer)
       abort.abort()
     }
   }
   return []
+}
+
+/**
+ * Resolve title text from one `readTitleSnapshots` result.
+ * @param {unknown} result - Per-session title result.
+ * @returns {string | null} Title, or null when unavailable.
+ */
+function titleValueOf(result) {
+  const value = result?.value?.title
+  if (typeof value === 'string' && value.trim().length > 0) return value.trim()
+  if (value !== null && typeof value === 'object' && typeof value.title === 'string' && value.title.trim().length > 0) {
+    return value.title.trim()
+  }
+  return null
+}
+
+/**
+ * Index title results once so list rendering is not quadratic in sessions.
+ * @param {unknown} results - Per-session title results.
+ * @returns {(sessionId: string) => string | null} Title lookup.
+ */
+function titleLookup(results) {
+  if (!Array.isArray(results)) return () => null
+  const byId = new Map()
+  for (const result of results) {
+    const id = String(result?.sessionId)
+    if (!byId.has(id)) byId.set(id, titleValueOf(result))
+  }
+  return sessionId => byId.get(String(sessionId)) ?? null
 }
 
 /**
@@ -1075,12 +1151,7 @@ async function archivedIds(ctx) {
 function titleOf(results, sessionId) {
   if (!Array.isArray(results)) return null
   const result = results.find(item => String(item?.sessionId) === sessionId)
-  const value = result?.value?.title
-  if (typeof value === 'string' && value.trim().length > 0) return value.trim()
-  if (value !== null && typeof value === 'object' && typeof value.title === 'string' && value.title.trim().length > 0) {
-    return value.title.trim()
-  }
-  return null
+  return titleValueOf(result)
 }
 
 /**

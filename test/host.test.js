@@ -35,7 +35,7 @@ function makeHarness({ getter = true, tools = false, config, listHeaders = false
   const routes = new Map()
   const listeners = new Map()
   const archived = new Set([SESSION_ID, GHOST_ID])
-  const entries = new Map()
+  const pinned = new Set()
   const registeredTools = new Map()
   const archiveCalls = []
 
@@ -78,6 +78,7 @@ function makeHarness({ getter = true, tools = false, config, listHeaders = false
           throw error
         }
         archived.add(id)
+        pinned.delete(id)
       },
       async unarchiveSession(id) {
         archived.delete(id)
@@ -93,7 +94,7 @@ function makeHarness({ getter = true, tools = false, config, listHeaders = false
       async *follow() {
         yield {
           type: 'baseline',
-          value: { items: [], archivedSessionIds: [...archived], pinnedSessionIds: [] },
+          value: { items: [], archivedSessionIds: [...archived], pinnedSessionIds: [...pinned] },
         }
       },
     },
@@ -190,10 +191,21 @@ function makeHarness({ getter = true, tools = false, config, listHeaders = false
     Object.defineProperty(ctx.workspaceRegistry, 'archivedSessionIds', {
       get: () => [...archived],
     })
+    Object.defineProperty(ctx.workspaceRegistry, 'pinnedSessionIds', {
+      get: () => [...pinned],
+    })
   }
 
   apply(ctx, config ?? {})
-  return { ctx, routes, listeners, archived, entries, registeredTools, archiveCalls }
+  return {
+    ctx,
+    routes,
+    listeners,
+    archived,
+    pinned,
+    registeredTools,
+    archiveCalls,
+  }
 }
 
 async function withHome(run) {
@@ -245,10 +257,7 @@ test('registers every POST route', () => {
 })
 
 test('list joins archive set, title, size, workspace, and metadata', async () => {
-  const previous = process.env.DSH_HOME
-  const home = await mkdtemp(join(tmpdir(), 'dkam-host-'))
-  process.env.DSH_HOME = home
-  try {
+  await withHome(async () => {
     const { routes } = makeHarness()
     const response = await post(routes, 'list', {})
     assert.equal(response.status, 200)
@@ -265,11 +274,7 @@ test('list joins archive set, title, size, workspace, and metadata', async () =>
     assert.equal(ghost.ghost, true)
     assert.equal(body.summary.count, 2)
     assert.equal(body.summary.totalSize, 2048)
-  } finally {
-    if (previous === undefined) delete process.env.DSH_HOME
-    else process.env.DSH_HOME = previous
-    await rm(home, { recursive: true, force: true })
-  }
+  })
 })
 
 test('list tolerates persistence backends that return bare headers', async () => {
@@ -282,21 +287,14 @@ test('list tolerates persistence backends that return bare headers', async () =>
 })
 
 test('falls back to the controller baseline when the registry getter is hidden', async () => {
-  const previous = process.env.DSH_HOME
-  const home = await mkdtemp(join(tmpdir(), 'dkam-host-'))
-  process.env.DSH_HOME = home
-  try {
+  await withHome(async () => {
     const { routes } = makeHarness({ getter: false })
     const response = await post(routes, 'list', {})
     assert.equal(response.status, 200)
     const body = await response.json()
     assert.equal(body.ok, true)
     assert.equal(body.items.length, 2)
-  } finally {
-    if (previous === undefined) delete process.env.DSH_HOME
-    else process.env.DSH_HOME = previous
-    await rm(home, { recursive: true, force: true })
-  }
+  })
 })
 
 test('preview returns a read-only projection without unarchiving', async () => {
@@ -323,10 +321,7 @@ test('preview rejects a session outside the archive set', async () => {
 })
 
 test('entry saves note and tags, then list reflects them', async () => {
-  const previous = process.env.DSH_HOME
-  const home = await mkdtemp(join(tmpdir(), 'dkam-host-'))
-  process.env.DSH_HOME = home
-  try {
+  await withHome(async () => {
     const { routes } = makeHarness()
     const saved = await post(routes, 'entry', {
       sessionId: SESSION_ID,
@@ -343,11 +338,7 @@ test('entry saves note and tags, then list reflects them', async () => {
     const item = body.items.find(entry => entry.sessionId === SESSION_ID)
     assert.equal(item.note, 'revisit after launch')
     assert.deepEqual(item.tags, ['design', 'preview'])
-  } finally {
-    if (previous === undefined) delete process.env.DSH_HOME
-    else process.env.DSH_HOME = previous
-    await rm(home, { recursive: true, force: true })
-  }
+  })
 })
 
 test('unarchive removes one id without touching metadata', async () => {
@@ -356,6 +347,7 @@ test('unarchive removes one id without touching metadata', async () => {
   assert.equal(response.status, 200)
   const body = await response.json()
   assert.deepEqual(body.restored, [SESSION_ID])
+  assert.deepEqual(body.archivedSessionIds, [GHOST_ID])
   assert.equal(archived.has(SESSION_ID), false)
 })
 
@@ -460,6 +452,26 @@ test('candidates apply time range, basis, and state filters', async () => {
   assert.equal(fallback.basis, 'activity')
   assert.equal(fallback.state, 'all')
   assert.equal(fallback.sort, 'active-desc')
+})
+
+test('candidates exclude pinned sessions from the batch pool', async () => {
+  const { routes, pinned } = makeHarness()
+  pinned.add(ACTIVE_ID)
+
+  const all = await (await post(routes, 'candidates', {})).json()
+  assert.equal(all.openCount, 0)
+  assert.equal(all.openTotal, 0)
+  assert.equal(all.total, 1)
+  assert.deepEqual(all.items.map(item => item.sessionId), [SESSION_ID])
+
+  const openOnly = await (await post(routes, 'candidates', { state: 'open' })).json()
+  assert.deepEqual(openOnly.items, [])
+  assert.equal(openOnly.openTotal, 0)
+
+  // Unpinning the session makes it eligible for the batch pool again.
+  pinned.delete(ACTIVE_ID)
+  const restored = await (await post(routes, 'candidates', { state: 'open' })).json()
+  assert.deepEqual(restored.items.map(item => item.sessionId), [ACTIVE_ID])
 })
 
 test('candidates exclude sessions newer than the preset and sort before the cap', async () => {

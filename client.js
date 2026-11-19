@@ -50,7 +50,6 @@ window.__ModuleLoader__.load({
         restoreSelected: 'Restore selected',
         export: 'Export',
         exportSelected: 'Export selected',
-        loading: 'Loading…',
         loadFailed: 'Could not load the archive',
         retry: 'Retry',
         emptyTitle: 'No archived sessions yet',
@@ -86,13 +85,10 @@ window.__ModuleLoader__.load({
         saving: 'Saving…',
         saved: 'Note saved',
         saveFailed: 'Could not save the note',
-        preview: 'Archived session',
         previewLoading: 'Reading a read-only preview…',
-        previewFailed: 'Could not load the preview',
         close: 'Close',
         copy: 'Copy',
         copied: 'Copied',
-        restoreDone: 'Restored. The archive center has been refreshed.',
         restoreFailed: 'Could not restore this session',
         partialRestore: 'Some sessions could not be restored',
         exportStarted: 'Export started',
@@ -100,7 +96,6 @@ window.__ModuleLoader__.load({
         downloadZip: 'Export ZIP',
         requestFailed: 'Request failed',
         clearTag: 'Clear tag filter',
-        selected: 'Selected',
         unknownSize: 'Unknown size',
         reasonInvalidRequest: 'The request was rejected',
         reasonForbidden: 'The request was rejected',
@@ -122,7 +117,6 @@ window.__ModuleLoader__.load({
         viewDeleted: 'View deleted',
         viewSaveFailed: 'Could not save the view',
         viewDeleteFailed: 'Could not delete the view',
-        batchTitle: 'Archive sessions',
         batchDesc: 'Filter sessions by age, choose exactly what to change, then archive or restore them in one step. Active sessions still require explicit confirmation before anything is stopped.',
         tabArchive: 'Archive library',
         tabBatch: 'Batch workspace',
@@ -155,8 +149,6 @@ window.__ModuleLoader__.load({
         batchUseAllStates: 'Show all sessions',
         batchRestored: 'Restored',
         batchActiveWarn: 'These sessions are doing work. Confirm that stopping their activity is okay.',
-        candidateLoading: 'Loading sessions…',
-        candidateEmpty: 'No sessions are available to archive',
         candidateArchived: 'Archived',
         candidateActive: 'Active',
         candidateActiveHint: 'This session is doing work',
@@ -164,10 +156,8 @@ window.__ModuleLoader__.load({
         archiveSelected: 'Archive selected',
         stopAndArchive: 'Stop activity and archive',
         confirmStop: 'I understand this stops the listed activity and archives the session.',
-        activity: 'Activity',
         batchFailed: 'Some sessions could not be archived',
         batchArchived: 'Archived',
-        notFound: 'Session not found',
         archiveNoticeHint: 'Archived. Open Archive Manager to see the archive time, note, and tags.',
         restoreOpenHint: 'Restored. Open it from the session list.',
         transcript: 'Full transcript',
@@ -218,7 +208,6 @@ window.__ModuleLoader__.load({
         restoreSelected: '恢复所选',
         export: '导出',
         exportSelected: '导出所选',
-        loading: '正在加载…',
         loadFailed: '无法加载归档列表',
         retry: '重试',
         emptyTitle: '还没有归档会话',
@@ -254,13 +243,10 @@ window.__ModuleLoader__.load({
         saving: '保存中…',
         saved: '备注已保存',
         saveFailed: '备注保存失败',
-        preview: '归档会话',
         previewLoading: '正在读取只读预览…',
-        previewFailed: '预览加载失败',
         close: '关闭',
         copy: '复制',
         copied: '已复制',
-        restoreDone: '已恢复，归档中心已刷新。',
         restoreFailed: '恢复这个会话失败',
         partialRestore: '部分会话恢复失败',
         exportStarted: '已开始导出',
@@ -268,7 +254,6 @@ window.__ModuleLoader__.load({
         downloadZip: '导出 ZIP',
         requestFailed: '请求失败',
         clearTag: '清除标签筛选',
-        selected: '已选',
         unknownSize: '大小未知',
         reasonInvalidRequest: '请求无效',
         reasonForbidden: '请求被拒绝',
@@ -290,7 +275,6 @@ window.__ModuleLoader__.load({
         viewDeleted: '视图已删除',
         viewSaveFailed: '视图保存失败',
         viewDeleteFailed: '视图删除失败',
-        batchTitle: '归档会话',
         batchDesc: '按会话新旧筛选，明确勾选要处理的项，再一步完成归档或恢复。活动中的会话仍需显式确认后才会停止。',
         tabArchive: '归档库',
         tabBatch: '批量工作台',
@@ -323,8 +307,6 @@ window.__ModuleLoader__.load({
         batchUseAllStates: '查看全部会话',
         batchRestored: '已恢复',
         batchActiveWarn: '这些会话正在执行任务，请确认可以停止其活动。',
-        candidateLoading: '正在加载会话…',
-        candidateEmpty: '没有可归档的会话',
         candidateArchived: '已归档',
         candidateActive: '活动中',
         candidateActiveHint: '该会话正在执行任务',
@@ -332,10 +314,8 @@ window.__ModuleLoader__.load({
         archiveSelected: '归档所选',
         stopAndArchive: '停止活动并归档',
         confirmStop: '我确认停止下列活动并归档该会话。',
-        activity: '活动',
         batchFailed: '部分会话归档失败',
         batchArchived: '已归档',
-        notFound: '找不到会话',
         archiveNoticeHint: '已归档。打开“归档管理”可查看归档时间、备注和标签。',
         restoreOpenHint: '已恢复，请在会话列表打开。',
         transcript: '完整转录',
@@ -452,7 +432,7 @@ window.__ModuleLoader__.load({
 .dkam-field textarea{min-height:76px;resize:vertical;line-height:1.5}
 .dkam-editor-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px}
 .dkam-hint{color:var(--dkam-faint);font-size:11.5px}
-.dkam-toast{position:fixed;left:50%;bottom:28px;z-index:40;transform:translateX(-50%);max-width:min(560px,calc(100vw - 40px));padding:10px 16px;border:1px solid var(--dkam-border-strong);border-radius:999px;background:var(--dkam-layer);color:var(--dkam-text);box-shadow:0 12px 40px var(--dsw-alias-bg-mask-1,rgba(0,0,0,.24));font-size:13px;text-align:center}
+.dkam-toast{position:fixed;left:50%;bottom:76px;z-index:40;transform:translateX(-50%);max-width:min(560px,calc(100vw - 40px));padding:10px 16px;border:1px solid var(--dkam-border-strong);border-radius:999px;background:var(--dkam-layer);color:var(--dkam-text);box-shadow:0 12px 40px var(--dsw-alias-bg-mask-1,rgba(0,0,0,.24));font-size:13px;text-align:center;pointer-events:none}
 .dkam-spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--dkam-border);border-top-color:var(--dkam-brand);border-radius:50%;animation:dkam-spin .8s linear infinite}
 @keyframes dkam-spin{to{transform:rotate(360deg)}}
 @media (max-width:860px){.dkam-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.dkam-row{grid-template-columns:22px minmax(0,1fr)}.dkam-row-meta{grid-column:2;flex-direction:row;align-items:center;gap:10px}.dkam-row-actions{grid-column:2;justify-content:flex-start}.dkam-toolbar-actions{margin-left:0}.dkam-head{padding:18px 18px 12px}.dkam-scroll{padding:12px 18px 32px}.dkam-batch-filters,.dkam-batch-bar,.dkam-batch-scroll,.dkam-batch-foot{padding-left:18px;padding-right:18px}.dkam-batch-warn{margin-left:18px;margin-right:18px}.dkam-batch-row{grid-template-columns:20px minmax(0,1fr)}.dkam-batch-side{display:none}}
@@ -495,19 +475,11 @@ window.__ModuleLoader__.load({
 .dkam-batch-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .dkam-batch-warn{margin:0 26px 10px}
 .dkam-empty-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:8px}
-.dkam-candidate-list{display:flex;flex-direction:column;gap:6px;max-height:48vh;overflow:auto;padding-right:2px}
-.dkam-candidate-row{display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--dkam-border);border-radius:9px;background:var(--dkam-layer-2)}
-.dkam-candidate-row[data-archived='true']{opacity:.62}
-.dkam-candidate-main{min-width:0}
-.dkam-candidate-title{display:flex;align-items:center;gap:6px;min-width:0;font-size:13px;font-weight:600}
-.dkam-candidate-title span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dkam-candidate-sub{margin-top:2px;color:var(--dkam-muted);font-size:11.5px}
-.dkam-candidate-activity{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
 .dkam-activity-chip{display:inline-flex;align-items:center;padding:1px 7px;border-radius:999px;background:var(--dsw-alias-state-warn-soft,rgba(210,153,34,.14));color:var(--dsw-alias-state-warn-primary,#9a6700);font-size:10.5px}
 .dkam-warn-box{padding:10px 12px;border:1px solid var(--dsw-alias-state-warn-primary,#9a6700);border-radius:9px;background:var(--dsw-alias-state-warn-soft,rgba(210,153,34,.1))}
 .dkam-warn-box h3{margin:0 0 4px;font-size:12.5px;color:var(--dkam-text)}
 .dkam-warn-box p{margin:0;color:var(--dkam-muted);font-size:12px}
-.dkam-warn-box ul{margin:6px 0 0;padding-left:18px;color:var(--dkam-muted);font-size:12px}
+.dkam-warn-box ul{margin:6px 0 0;padding-left:18px;max-height:84px;overflow:auto;color:var(--dkam-muted);font-size:12px}
 .dkam-transcript{display:flex;flex-direction:column;gap:6px;max-height:340px;overflow:auto;padding:2px}
 .dkam-event{display:grid;grid-template-columns:112px minmax(0,1fr);gap:9px;padding:7px 9px;border:1px solid var(--dkam-border);border-radius:7px;background:var(--dkam-layer-2)}
 .dkam-event-head{display:flex;flex-direction:column;gap:2px;color:var(--dkam-faint);font-size:10.5px;line-height:1.3}
@@ -581,13 +553,15 @@ window.__ModuleLoader__.load({
       return `${size >= 10 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`
     }
 
+    let timeFormatter
     /** Format an epoch timestamp, or an em dash when absent. */
     function formatTime(value) {
       if (!Number.isFinite(value) || value <= 0) return '—'
       try {
-        return new Intl.DateTimeFormat(undefined, {
+        timeFormatter ??= new Intl.DateTimeFormat(undefined, {
           year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-        }).format(new Date(value))
+        })
+        return timeFormatter.format(new Date(value))
       } catch {
         return new Date(value).toLocaleString()
       }
@@ -720,6 +694,7 @@ window.__ModuleLoader__.load({
           'list-failed': 'reasonListFailed',
           'unarchive-failed': 'reasonUnarchiveFailed',
           'save-failed': 'reasonSaveFailed',
+          'delete-failed': 'viewDeleteFailed',
           'method-not-allowed': 'reasonMethodNotAllowed',
           'confirmation-required': 'reasonConfirmationRequired',
           'too-many-views': 'reasonTooManyViews',
@@ -749,9 +724,7 @@ window.__ModuleLoader__.load({
           data = null
         }
         if (!response.ok) {
-          const error = new Error(reasonText(data?.reason))
-          error.reason = data?.reason
-          throw error
+          throw new Error(reasonText(data?.reason))
         }
         return data ?? {}
       }, [reasonText, tr])
@@ -873,25 +846,28 @@ window.__ModuleLoader__.load({
 
       const reload = () => setReloadKey(key => key + 1)
 
-      const toggleAll = () => {
-        setSelected(previous => {
-          if (allSelected) {
-            const next = new Set(previous)
-            for (const item of filtered) next.delete(item.sessionId)
-            return next
+      const toggleAllIn = (setter, visible, allSelected) => {
+        setter(previous => {
+          const next = new Set(previous)
+          for (const item of visible) {
+            if (allSelected) next.delete(item.sessionId)
+            else next.add(item.sessionId)
           }
-          return new Set([...previous, ...filtered.map(item => item.sessionId)])
+          return next
         })
       }
 
-      const toggleOne = (sessionId) => {
-        setSelected(previous => {
+      const toggleOneIn = (setter, sessionId) => {
+        setter(previous => {
           const next = new Set(previous)
           if (next.has(sessionId)) next.delete(sessionId)
           else next.add(sessionId)
           return next
         })
       }
+
+      const toggleAll = () => toggleAllIn(setSelected, filtered, allSelected)
+      const toggleOne = (sessionId) => toggleOneIn(setSelected, sessionId)
 
       const openPreview = (item) => {
         setPreview({ item, data: null, loading: true, error: null })
@@ -994,14 +970,16 @@ window.__ModuleLoader__.load({
         anchor.remove()
       }
 
-      const exportSelected = () => {
-        const chosen = items.filter(item => selected.has(item.sessionId) && !item.ghost)
-        if (chosen.length === 0) return
-        chosen.forEach((item, index) => {
+      const exportMany = (chosen) => {
+        const exportable = chosen.filter(item => !item.ghost)
+        if (exportable.length === 0) return
+        exportable.forEach((item, index) => {
           setTimeout(() => exportSession(item.sessionId), index * 350)
         })
         setNotice(`${tr('exportStarted')} · ${tr('exportHint')}`)
       }
+
+      const exportSelected = () => exportMany(items.filter(item => selected.has(item.sessionId)))
 
       const copyId = async (sessionId) => {
         try {
@@ -1024,16 +1002,18 @@ window.__ModuleLoader__.load({
         }
       }
 
+      const resetFilters = () => {
+        setQuery('')
+        setFilter('all')
+        setSort('archived-desc')
+        setTag('')
+      }
+
       const applyView = (id) => {
         setViewId(id)
         const view = views.find(candidate => candidate.id === id)
         if (!view) {
-          if (id === '') {
-            setQuery('')
-            setFilter('all')
-            setSort('archived-desc')
-            setTag('')
-          }
+          if (id === '') resetFilters()
           return
         }
         setQuery(view.query ?? '')
@@ -1090,26 +1070,8 @@ window.__ModuleLoader__.load({
 
       const reloadBatch = () => setBatchReloadKey(key => key + 1)
 
-      const toggleBatchAll = () => {
-        setBatchSelected(previous => {
-          const next = new Set(previous)
-          if (batchAllSelected) {
-            for (const candidate of batchVisible) next.delete(candidate.sessionId)
-          } else {
-            for (const candidate of batchVisible) next.add(candidate.sessionId)
-          }
-          return next
-        })
-      }
-
-      const toggleBatchOne = (sessionId) => {
-        setBatchSelected(previous => {
-          const next = new Set(previous)
-          if (next.has(sessionId)) next.delete(sessionId)
-          else next.add(sessionId)
-          return next
-        })
-      }
+      const toggleBatchAll = () => toggleAllIn(setBatchSelected, batchVisible, batchAllSelected)
+      const toggleBatchOne = (sessionId) => toggleOneIn(setBatchSelected, sessionId)
 
       const clearBatchSelection = () => {
         setBatchSelected(new Set())
@@ -1180,14 +1142,7 @@ window.__ModuleLoader__.load({
         }
       }
 
-      const exportBatch = () => {
-        const chosen = (batchItems ?? []).filter(candidate => batchSelected.has(candidate.sessionId))
-        if (chosen.length === 0) return
-        chosen.forEach((candidate, index) => {
-          setTimeout(() => exportSession(candidate.sessionId), index * 350)
-        })
-        setNotice(`${tr('exportStarted')} · ${tr('exportHint')}`)
-      }
+      const exportBatch = () => exportMany((batchItems ?? []).filter(candidate => batchSelected.has(candidate.sessionId)))
 
       const data = preview?.data
       const item = preview?.item
@@ -1388,12 +1343,13 @@ window.__ModuleLoader__.load({
               h('h3', null, tr('batchActiveWarn')),
               h('p', null, tr('candidateActiveHint')),
               h('ul', null,
-                batchFailures.map(failure => h('li', { key: failure.sessionId },
-                  failureTitle(failure.sessionId),
-                  activityLabels(failure.activity).length > 0
-                    ? ` — ${activityLabels(failure.activity).join(', ')}`
-                    : '',
-                )),
+                batchFailures.map((failure) => {
+                  const labels = activityLabels(failure.activity)
+                  return h('li', { key: failure.sessionId },
+                    failureTitle(failure.sessionId),
+                    labels.length > 0 ? ` — ${labels.join(', ')}` : '',
+                  )
+                }),
               ),
               h('label', { className: 'dkam-check', style: { marginTop: '8px' } },
                 h('input', {
@@ -1480,7 +1436,7 @@ window.__ModuleLoader__.load({
               }, h(RefreshIcon), tr('refresh')),
             ),
           ),
-          mode === 'library' ? h('div', { className: 'dkam-library-head' },
+          mode === 'library' ? h('div', null,
             h('div', { className: 'dkam-stats' },
               statCard(tr('statArchived'), String(count), 'count'),
               statCard(tr('statSize'), knownSizes > 0 ? formatBytes(totalSize) : '—', 'size'),
@@ -1612,7 +1568,7 @@ window.__ModuleLoader__.load({
                     h('h2', null, tr('noMatch')),
                     h('button', {
                       className: 'dkam-btn',
-                      onClick: () => { setQuery(''); setFilter('all'); setTag(''); setSort('archived-desc') },
+                      onClick: resetFilters,
                     }, tr('clearFilters')),
                   )
                   : h('div', { className: 'dkam-list' }, filtered.map(row => {
