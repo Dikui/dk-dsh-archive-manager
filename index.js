@@ -55,6 +55,7 @@ const MAX_ARCHIVED_CANDIDATES = 100
 
 /** Age presets accepted by the batch workspace: sessions at least this old. */
 const CANDIDATE_RANGES = new Map([
+  ['older3d', 3 * 24 * 60 * 60 * 1000],
   ['older7d', 7 * 24 * 60 * 60 * 1000],
   ['older30d', 30 * 24 * 60 * 60 * 1000],
   ['older90d', 90 * 24 * 60 * 60 * 1000],

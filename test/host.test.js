@@ -514,6 +514,36 @@ test('candidates exclude sessions newer than the preset and sort before the cap'
   assert.deepEqual(activeAgainstCreatedBasis.items.map(item => item.sessionId), ['session-old', 'session-mid', 'session-new'])
 })
 
+test('candidates accept the three-day preset', async () => {
+  const { routes, ctx } = makeHarness()
+  const now = Date.now()
+  const day = 24 * 60 * 60 * 1000
+  const records = [
+    { id: 'session-two-days', createdAt: now - 40 * day, lastActivityAt: now - 2 * day },
+    { id: 'session-five-days', createdAt: now - 40 * day, lastActivityAt: now - 5 * day },
+    { id: 'session-ten-days', createdAt: now - 40 * day, lastActivityAt: now - 10 * day },
+  ]
+  ctx.sessionQuery.listSessions = () => records.map(record => ({
+    header: header(record.id, { createdAt: record.createdAt, lastActivityAt: record.lastActivityAt }),
+    live: false,
+    persisted: true,
+    formatStatus: 'ok',
+  }))
+
+  const byThreeDays = await (await post(routes, 'candidates', {
+    range: 'older3d', basis: 'activity', state: 'open', sort: 'active-desc',
+  })).json()
+  assert.equal(byThreeDays.range, 'older3d')
+  // Two days is not old enough for "older than 3 days"; five and ten are.
+  assert.deepEqual(byThreeDays.items.map(item => item.sessionId), ['session-five-days', 'session-ten-days'])
+
+  // The boundary stays exclusive to newer sessions: 7 days still drops the 5-day row.
+  const bySevenDays = await (await post(routes, 'candidates', {
+    range: 'older7d', basis: 'activity', state: 'open', sort: 'active-desc',
+  })).json()
+  assert.deepEqual(bySevenDays.items.map(item => item.sessionId), ['session-ten-days'])
+})
+
 test('candidates cap after sorting so oldest-first keeps the oldest sessions', async () => {
   const { routes, ctx } = makeHarness()
   const now = Date.now()

@@ -122,6 +122,7 @@ window.__ModuleLoader__.load({
         tabBatch: 'Batch workspace',
         timeRange: 'Time range',
         rangeAll: 'All time',
+        rangeOlder3d: 'Older than 3 days',
         rangeOlder7d: 'Older than 7 days',
         rangeOlder30d: 'Older than 30 days',
         rangeOlder90d: 'Older than 90 days',
@@ -280,6 +281,7 @@ window.__ModuleLoader__.load({
         tabBatch: '批量工作台',
         timeRange: '时间范围',
         rangeAll: '全部时间',
+        rangeOlder3d: '超过 3 天',
         rangeOlder7d: '超过 7 天',
         rangeOlder30d: '超过 30 天',
         rangeOlder90d: '超过 90 天',
@@ -1173,6 +1175,7 @@ window.__ModuleLoader__.load({
       const renderBatch = () => {
         const rangeOptions = [
           ['all', tr('rangeAll')],
+          ['older3d', tr('rangeOlder3d')],
           ['older7d', tr('rangeOlder7d')],
           ['older30d', tr('rangeOlder30d')],
           ['older90d', tr('rangeOlder90d')],

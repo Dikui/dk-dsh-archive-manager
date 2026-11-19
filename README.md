@@ -29,7 +29,7 @@ without changing the built-in archive set or deleting any data.
   view (up to 50); apply or delete it from the toolbar. Views live in a separate
   v1 domain so the entries schema needs no migration.
 - **Batch workspace** — a dedicated tab, not a modal. Filter the candidate pool
-  by age (older than 7 / 30 / 90 days, or all time), time basis (last activity
+  by age (older than 3 / 7 / 30 / 90 days, or all time), time basis (last activity
   or created), and state (open, archived, or both); then search, sort, and
   select the exact rows to archive, restore, or export from a sticky footer.
   The Host applies age and state filters, then sorts before capping the pool, so
@@ -118,7 +118,7 @@ syntax-checked by `npm run check`.
 - Batch candidates call the public `workspace/session-activity` waterfall to
   label active rows. The actual archive call never passes `stopActivity` unless
   the user confirmed; the Host's own activity refusal is the final guard.
-- `candidates` accepts `range` (`all`, `older7d`, `older30d`, `older90d`),
+- `candidates` accepts `range` (`all`, `older3d`, `older7d`, `older30d`, `older90d`),
   `basis` (`activity` or `created`), `state` (`all`, `open`, `archived`), and
   `sort` (`active-asc`, `active-desc`, `created-desc`). It removes pinned
   sessions from the pool before filtering or sorting, so no candidate row is
