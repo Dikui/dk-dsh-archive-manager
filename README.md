@@ -29,13 +29,14 @@ without changing the built-in archive set or deleting any data.
   view (up to 50); apply or delete it from the toolbar. Views live in a separate
   v1 domain so the entries schema needs no migration.
 - **Batch workspace** — a dedicated tab, not a modal. Filter the candidate pool
-  by time range (past 24 hours / 7 / 30 / 90 days or all time), time basis
-  (last activity or created), and state (open, archived, or both); then search,
-  sort, and select the exact rows to archive, restore, or export from a sticky
-  footer. The Host applies time and state filters before capping the pool, so
-  narrowing the range reveals older sessions instead of hiding them behind the
-  first page. Active rows show the reported activity; the Host refuses to stop
-  or archive them until the user explicitly confirms. No silent `stopActivity`.
+  by age (older than 7 / 30 / 90 days, or all time), time basis (last activity
+  or created), and state (open, archived, or both); then search, sort, and
+  select the exact rows to archive, restore, or export from a sticky footer.
+  The Host applies age and state filters, then sorts before capping the pool, so
+  the default oldest-first view surfaces the stalest sessions and the cap keeps
+  the rows the chosen order puts first. Active rows show the reported activity;
+  the Host refuses to stop or archive them until the user explicitly confirms.
+  No silent `stopActivity`.
 - **Restore** — one session or a selection, through
   `workspaceRegistry.unarchiveSession`.
 - **Capacity** — summed session-log size and unknown-size count. Attachment
@@ -112,14 +113,18 @@ syntax-checked by `npm run check`.
 - Batch candidates call the public `workspace/session-activity` waterfall to
   label active rows. The actual archive call never passes `stopActivity` unless
   the user confirmed; the Host's own activity refusal is the final guard.
-- `candidates` accepts `range` (`all`, `24h`, `7d`, `30d`, `90d`), `basis`
-  (`activity` or `created`), and `state` (`all`, `open`, `archived`). It filters
-  before slicing up to 200 open and 100 archived rows, and returns
-  `openTotal`, `archivedTotal`, `total`, `truncatedOpen`, and
-  `truncatedArchived` so the Client can say when a range is still too broad.
-  The activity basis uses the session log's mtime because session headers do
-  not carry an activity timestamp; if the log cannot be located, it falls back
-  to `createdAt`. Search and sort inside the batch workspace are local to the
+- `candidates` accepts `range` (`all`, `older7d`, `older30d`, `older90d`),
+  `basis` (`activity` or `created`), `state` (`all`, `open`, `archived`), and
+  `sort` (`active-asc`, `active-desc`, `created-desc`). A range keeps sessions
+  whose chosen timestamp is at least that old. It filters and sorts before
+  slicing up to 200 open and 100 archived rows, and returns `openTotal`,
+  `archivedTotal`, `total`, `truncatedOpen`, and `truncatedArchived` so the
+  Client can say when a range is still too broad. The activity basis uses the
+  session log's mtime because session headers do not carry an activity
+  timestamp; if the log cannot be located, it falls back to `lastActivityAt`,
+  then `createdAt`. `active-asc`/`active-desc` sort by activity and
+  `created-desc` by creation time, independent of the range basis; sorting
+  happens in the Host before the cap. Search and title sorting are local to the
   loaded rows.
 - The Client talks to the Host with `fetch` and registers into the `main` and
   `sidebar.panellist` slots. It does not depend on internal Client services.

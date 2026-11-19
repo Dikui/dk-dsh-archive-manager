@@ -444,20 +444,88 @@ test('candidates apply time range, basis, and state filters', async () => {
   assert.equal(allTime.truncatedOpen, false)
   assert.equal(allTime.truncatedArchived, false)
 
-  // Fixture sessions were created in 2023, so a recent window excludes them.
-  const recent = await (await post(routes, 'candidates', { range: '7d', basis: 'activity' })).json()
-  assert.equal(recent.range, '7d')
-  assert.equal(recent.total, 0)
-  assert.equal(recent.items.length, 0)
+  // Fixture sessions were created in 2023, so they are older than any preset.
+  const older = await (await post(routes, 'candidates', { range: 'older7d', basis: 'activity' })).json()
+  assert.equal(older.range, 'older7d')
+  assert.equal(older.total, 2)
+  assert.deepEqual(older.items.map(item => item.sessionId), [ACTIVE_ID, SESSION_ID])
 
   const fallback = await (await post(routes, 'candidates', {
     range: 'nope',
     basis: 'nope',
     state: 'nope',
+    sort: 'nope',
   })).json()
   assert.equal(fallback.range, 'all')
   assert.equal(fallback.basis, 'activity')
   assert.equal(fallback.state, 'all')
+  assert.equal(fallback.sort, 'active-desc')
+})
+
+test('candidates exclude sessions newer than the preset and sort before the cap', async () => {
+  const { routes, ctx } = makeHarness()
+  const now = Date.now()
+  const day = 24 * 60 * 60 * 1000
+  const records = [
+    { id: 'session-old', createdAt: now - 40 * day, lastActivityAt: now - 2 * day },
+    { id: 'session-mid', createdAt: now - 10 * day, lastActivityAt: now - 20 * day },
+    { id: 'session-new', createdAt: now - 1 * day, lastActivityAt: now - 30 * day },
+  ]
+  ctx.sessionQuery.listSessions = () => records.map(record => ({
+    header: header(record.id, { createdAt: record.createdAt, lastActivityAt: record.lastActivityAt }),
+    live: false,
+    persisted: true,
+    formatStatus: 'ok',
+  }))
+
+  const byActivity = await (await post(routes, 'candidates', {
+    range: 'older7d', basis: 'activity', state: 'open', sort: 'active-asc',
+  })).json()
+  // session-old was active 2 days ago, so "older than 7 days" must exclude it.
+  assert.deepEqual(byActivity.items.map(item => item.sessionId), ['session-new', 'session-mid'])
+
+  const recentFirst = await (await post(routes, 'candidates', {
+    range: 'older7d', basis: 'activity', state: 'open', sort: 'active-desc',
+  })).json()
+  assert.deepEqual(recentFirst.items.map(item => item.sessionId), ['session-mid', 'session-new'])
+
+  const byCreated = await (await post(routes, 'candidates', {
+    range: 'all', basis: 'created', state: 'open', sort: 'created-desc',
+  })).json()
+  assert.deepEqual(byCreated.items.map(item => item.sessionId), ['session-new', 'session-mid', 'session-old'])
+
+  // Sort is independent of the range basis: active-desc follows last activity
+  // even when the range is filtered by createdAt.
+  const activeAgainstCreatedBasis = await (await post(routes, 'candidates', {
+    range: 'all', basis: 'created', state: 'open', sort: 'active-desc',
+  })).json()
+  assert.deepEqual(activeAgainstCreatedBasis.items.map(item => item.sessionId), ['session-old', 'session-mid', 'session-new'])
+})
+
+test('candidates cap after sorting so oldest-first keeps the oldest sessions', async () => {
+  const { routes, ctx } = makeHarness()
+  const now = Date.now()
+  const day = 24 * 60 * 60 * 1000
+  const records = Array.from({ length: 205 }, (_, index) => {
+    const time = now - (index + 1) * day
+    return {
+      header: header(`session-cap-${index}`, { createdAt: time, lastActivityAt: time }),
+      live: false,
+      persisted: true,
+      formatStatus: 'ok',
+    }
+  })
+  ctx.sessionQuery.listSessions = () => records
+
+  const body = await (await post(routes, 'candidates', {
+    range: 'all', basis: 'created', state: 'open', sort: 'active-asc',
+  })).json()
+  assert.equal(body.openTotal, 205)
+  assert.equal(body.items.length, 200)
+  assert.equal(body.truncatedOpen, true)
+  assert.equal(body.items[0].sessionId, 'session-cap-204')
+  assert.equal(body.items[199].sessionId, 'session-cap-5')
+  assert.ok(!body.items.some(item => item.sessionId === 'session-cap-0'))
 })
 
 test('candidates use the session log mtime for the activity basis', async () => {
@@ -474,10 +542,15 @@ test('candidates use the session log mtime for the activity basis', async () => 
       }],
     })
 
-    const result = await (await post(routes, 'candidates', { range: '7d', basis: 'activity' })).json()
+    // The log was touched one second ago, so it is not "older than 7 days",
+    // even though the fixture header was created in 2023.
+    const result = await (await post(routes, 'candidates', { range: 'older7d', basis: 'activity' })).json()
     assert.equal(result.total, 1)
-    assert.deepEqual(result.items.map(item => item.sessionId), [SESSION_ID])
-    assert.ok(Math.abs(result.items[0].lastActivityAt - mtime) < 50)
+    assert.deepEqual(result.items.map(item => item.sessionId), [ACTIVE_ID])
+
+    const all = await (await post(routes, 'candidates', { range: 'all', basis: 'activity' })).json()
+    const archived = all.items.find(item => item.sessionId === SESSION_ID)
+    assert.ok(Math.abs(archived.lastActivityAt - mtime) < 50)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

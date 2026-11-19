@@ -122,17 +122,15 @@ window.__ModuleLoader__.load({
         viewDeleted: 'View deleted',
         viewSaveFailed: 'Could not save the view',
         viewDeleteFailed: 'Could not delete the view',
-        batchArchive: 'Batch workspace',
         batchTitle: 'Archive sessions',
-        batchDesc: 'Filter sessions by time, choose exactly what to change, then archive or restore them in one step. Active sessions still require explicit confirmation before anything is stopped.',
+        batchDesc: 'Filter sessions by age, choose exactly what to change, then archive or restore them in one step. Active sessions still require explicit confirmation before anything is stopped.',
         tabArchive: 'Archive library',
         tabBatch: 'Batch workspace',
         timeRange: 'Time range',
         rangeAll: 'All time',
-        range24h: 'Past 24 hours',
-        range7d: 'Past 7 days',
-        range30d: 'Past 30 days',
-        range90d: 'Past 90 days',
+        rangeOlder7d: 'Older than 7 days',
+        rangeOlder30d: 'Older than 30 days',
+        rangeOlder90d: 'Older than 90 days',
         timeBasis: 'Time basis',
         basisActivity: 'Last activity',
         basisCreated: 'Created',
@@ -141,16 +139,18 @@ window.__ModuleLoader__.load({
         batchStateArchived: 'Archived',
         batchStateAll: 'All',
         batchSearchPlaceholder: 'Search loaded sessions',
-        batchSortRecent: 'Recently active',
+        batchSortLabel: 'Sort',
+        batchSortOldest: 'Oldest first',
+        batchSortRecent: 'Newest first',
         batchSortCreated: 'Newest created',
         batchSortTitle: 'Title',
         batchLoaded: 'Matching',
         batchOpenSelected: 'to archive',
         batchArchivedSelected: 'to restore',
         batchClearSelection: 'Clear selection',
-        batchTruncated: 'Only the first 200 open and 100 archived sessions are listed. Narrow the time range to see the rest.',
+        batchTruncated: 'Only the first 200 open and 100 archived sessions are listed. Raise the time threshold or change the sort to see different sessions.',
         batchEmptyTitle: 'No sessions match these filters',
-        batchEmptyHint: 'Try a wider time range, or show both open and archived sessions.',
+        batchEmptyHint: 'Try a shorter time threshold, or show all sessions.',
         batchUseAllTime: 'Use all time',
         batchUseAllStates: 'Show all sessions',
         batchRestored: 'Restored',
@@ -290,17 +290,15 @@ window.__ModuleLoader__.load({
         viewDeleted: '视图已删除',
         viewSaveFailed: '视图保存失败',
         viewDeleteFailed: '视图删除失败',
-        batchArchive: '批量工作台',
         batchTitle: '归档会话',
-        batchDesc: '按时间筛选会话，明确勾选要处理的项，再一步完成归档或恢复。活动中的会话仍需显式确认后才会停止。',
+        batchDesc: '按会话新旧筛选，明确勾选要处理的项，再一步完成归档或恢复。活动中的会话仍需显式确认后才会停止。',
         tabArchive: '归档库',
         tabBatch: '批量工作台',
         timeRange: '时间范围',
         rangeAll: '全部时间',
-        range24h: '过去 24 小时',
-        range7d: '过去 7 天',
-        range30d: '过去 30 天',
-        range90d: '过去 90 天',
+        rangeOlder7d: '超过 7 天',
+        rangeOlder30d: '超过 30 天',
+        rangeOlder90d: '超过 90 天',
         timeBasis: '时间依据',
         basisActivity: '最后活动',
         basisCreated: '创建时间',
@@ -309,16 +307,18 @@ window.__ModuleLoader__.load({
         batchStateArchived: '已归档',
         batchStateAll: '全部',
         batchSearchPlaceholder: '搜索已加载会话',
-        batchSortRecent: '最近活动',
+        batchSortLabel: '排序',
+        batchSortOldest: '最旧优先',
+        batchSortRecent: '最新优先',
         batchSortCreated: '最新创建',
         batchSortTitle: '按标题',
         batchLoaded: '匹配',
         batchOpenSelected: '待归档',
         batchArchivedSelected: '待恢复',
         batchClearSelection: '清空选择',
-        batchTruncated: '受上限限制，仅显示前 200 个待归档和 100 个已归档会话；可缩小时间范围查看其余会话。',
+        batchTruncated: '受上限限制，仅显示前 200 个待归档和 100 个已归档会话；可提高时间阈值或更改排序以查看其他会话。',
         batchEmptyTitle: '当前筛选没有会话',
-        batchEmptyHint: '试试扩大时间范围，或切换为全部状态。',
+        batchEmptyHint: '试试更短的时间阈值，或查看全部会话。',
         batchUseAllTime: '使用全部时间',
         batchUseAllStates: '查看全部会话',
         batchRestored: '已恢复',
@@ -637,7 +637,7 @@ window.__ModuleLoader__.load({
     /** Local batch-workspace filter; the server already applied time/state. */
     function filterBatchItems(items, options) {
       const query = String(options.query ?? '').trim().toLocaleLowerCase()
-      const sort = options.sort ?? 'active-desc'
+      const sort = options.sort ?? 'active-asc'
       const filtered = (Array.isArray(items) ? items : []).filter(item => {
         if (!query) return true
         const haystack = [item.title, item.workspaceTitle, item.cwd, item.sessionId]
@@ -652,9 +652,12 @@ window.__ModuleLoader__.load({
           case 'title':
             return String(a.title ?? '').localeCompare(String(b.title ?? ''), 'zh')
           case 'active-desc':
-          default:
             return (timeOf(b) ?? 0) - (timeOf(a) ?? 0)
               || (b.createdAt ?? 0) - (a.createdAt ?? 0)
+          case 'active-asc':
+          default:
+            return (timeOf(a) ?? 0) - (timeOf(b) ?? 0)
+              || (a.createdAt ?? 0) - (b.createdAt ?? 0)
         }
       })
       return filtered
@@ -692,11 +695,11 @@ window.__ModuleLoader__.load({
       const [batchMeta, setBatchMeta] = useState(null)
       const [batchLoading, setBatchLoading] = useState(false)
       const [batchError, setBatchError] = useState(null)
-      const [batchRange, setBatchRange] = useState('7d')
+      const [batchRange, setBatchRange] = useState('older7d')
       const [batchBasis, setBatchBasis] = useState('activity')
       const [batchState, setBatchState] = useState('open')
       const [batchQuery, setBatchQuery] = useState('')
-      const [batchSort, setBatchSort] = useState('active-desc')
+      const [batchSort, setBatchSort] = useState('active-asc')
       const [batchReloadKey, setBatchReloadKey] = useState(0)
       const [batchSelected, setBatchSelected] = useState(() => new Set())
       const [batchBusy, setBatchBusy] = useState(false)
@@ -813,7 +816,8 @@ window.__ModuleLoader__.load({
         let cancelled = false
         setBatchLoading(true)
         setBatchError(null)
-        post('candidates', { range: batchRange, basis: batchBasis, state: batchState })
+        const hostSort = batchSort === 'title' ? 'active-asc' : batchSort
+        post('candidates', { range: batchRange, basis: batchBasis, state: batchState, sort: hostSort })
           .then(data => {
             if (cancelled) return
             setBatchItems(Array.isArray(data.items) ? data.items : [])
@@ -832,7 +836,7 @@ window.__ModuleLoader__.load({
             setBatchLoading(false)
           })
         return () => { cancelled = true }
-      }, [mode, batchRange, batchBasis, batchState, batchReloadKey, post, tr])
+      }, [mode, batchRange, batchBasis, batchState, batchSort, batchReloadKey, post, tr])
 
       useEffect(() => {
         setBatchSelected(new Set())
@@ -1214,12 +1218,12 @@ window.__ModuleLoader__.load({
       const renderBatch = () => {
         const rangeOptions = [
           ['all', tr('rangeAll')],
-          ['24h', tr('range24h')],
-          ['7d', tr('range7d')],
-          ['30d', tr('range30d')],
-          ['90d', tr('range90d')],
+          ['older7d', tr('rangeOlder7d')],
+          ['older30d', tr('rangeOlder30d')],
+          ['older90d', tr('rangeOlder90d')],
         ]
         const sortOptions = [
+          ['active-asc', tr('batchSortOldest')],
           ['active-desc', tr('batchSortRecent')],
           ['created-desc', tr('batchSortCreated')],
           ['title', tr('batchSortTitle')],
@@ -1294,7 +1298,7 @@ window.__ModuleLoader__.load({
             h('select', {
               className: 'dkam-select',
               value: batchSort,
-              'aria-label': tr('batchSortRecent'),
+              'aria-label': tr('batchSortLabel'),
               onChange: event => setBatchSort(event.target.value),
             }, sortOptions.map(([value, label]) => h('option', { value, key: value }, label))),
           ),
@@ -1523,11 +1527,6 @@ window.__ModuleLoader__.load({
                 h('option', { value: 'title' }, tr('sortTitle')),
               ),
               h('div', { className: 'dkam-toolbar-actions' },
-                h('button', {
-                  className: 'dkam-btn',
-                  onClick: () => setMode('batch'),
-                  disabled: Boolean(busy),
-                }, tr('batchArchive')),
                 h('label', { className: 'dkam-check' },
                   h('input', { type: 'checkbox', checked: allSelected, onChange: toggleAll }),
                   tr('selectAll'),

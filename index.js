@@ -53,12 +53,11 @@ const MAX_BATCH = 200
 const MAX_CANDIDATES = 200
 const MAX_ARCHIVED_CANDIDATES = 100
 
-/** Time-window presets accepted by the batch workspace. */
+/** Age presets accepted by the batch workspace: sessions at least this old. */
 const CANDIDATE_RANGES = new Map([
-  ['24h', 24 * 60 * 60 * 1000],
-  ['7d', 7 * 24 * 60 * 60 * 1000],
-  ['30d', 30 * 24 * 60 * 60 * 1000],
-  ['90d', 90 * 24 * 60 * 60 * 1000],
+  ['older7d', 7 * 24 * 60 * 60 * 1000],
+  ['older30d', 30 * 24 * 60 * 60 * 1000],
+  ['older90d', 90 * 24 * 60 * 60 * 1000],
 ])
 
 /** Which timestamp a batch time window applies to. */
@@ -66,6 +65,9 @@ const CANDIDATE_BASES = new Set(['activity', 'created'])
 
 /** Which archive states the batch workspace may show. */
 const CANDIDATE_STATES = new Set(['all', 'open', 'archived'])
+
+/** Sort orders applied before the candidate cap. */
+const CANDIDATE_SORTS = new Set(['active-asc', 'active-desc', 'created-desc'])
 
 /** Host services this plugin requires. */
 export const inject = [
@@ -638,6 +640,7 @@ async function handleCandidates(ctx, _storePromise, request) {
   const range = CANDIDATE_RANGES.has(parsed.body.range) ? parsed.body.range : 'all'
   const basis = CANDIDATE_BASES.has(parsed.body.basis) ? parsed.body.basis : 'activity'
   const state = CANDIDATE_STATES.has(parsed.body.state) ? parsed.body.state : 'all'
+  const sort = CANDIDATE_SORTS.has(parsed.body.sort) ? parsed.body.sort : 'active-desc'
 
   try {
     // `locate` is synchronous and avoids a second full persistence scan;
@@ -661,9 +664,10 @@ async function handleCandidates(ctx, _storePromise, request) {
     })
 
     // Session headers carry no activity timestamp, so use the session log
-    // mtime when the activity basis needs a real "last used" time.
+    // mtime for activity filtering and activity sorting. Created-only sorting
+    // is the one case that needs no stat calls.
     const activityById = new Map()
-    if (basis === 'activity') {
+    if (basis === 'activity' || sort !== 'created-desc') {
       const times = await mapLimit(inState, 8, record => lastActivityOf(
         ctx,
         record?.header,
@@ -675,23 +679,37 @@ async function handleCandidates(ctx, _storePromise, request) {
       })
     }
 
-    const windowMs = CANDIDATE_RANGES.get(range) ?? null
-    const cutoff = windowMs === null ? null : Date.now() - windowMs
-    const timeOf = record => {
+    const ageMs = CANDIDATE_RANGES.get(range) ?? null
+    const cutoff = ageMs === null ? null : Date.now() - ageMs
+    const createdTimeOf = record => Number.isFinite(record?.header?.createdAt)
+      ? record.header.createdAt
+      : null
+    const activityTimeOf = record => {
       const header = record?.header ?? {}
-      const created = Number.isFinite(header.createdAt) ? header.createdAt : null
-      const active = activityById.get(String(header.id)) ?? (Number.isFinite(header.lastActivityAt) ? header.lastActivityAt : null)
-      return basis === 'created' ? created : (active ?? created)
+      const active = activityById.get(String(header.id))
+        ?? (Number.isFinite(header.lastActivityAt) ? header.lastActivityAt : null)
+      return active ?? createdTimeOf(record)
     }
+    const filterTimeOf = basis === 'created' ? createdTimeOf : activityTimeOf
     const matching = inState.filter(record => {
       if (cutoff !== null) {
-        const time = timeOf(record)
-        if (time === null || time < cutoff) return false
+        const time = filterTimeOf(record)
+        if (time === null || time > cutoff) return false
       }
       return true
     })
-    matching.sort((a, b) => (timeOf(b) ?? 0) - (timeOf(a) ?? 0)
-      || (b.header?.createdAt ?? 0) - (a.header?.createdAt ?? 0))
+    // Sort the whole matching set before slicing, so the cap keeps the rows
+    // this order considers first. Grouping open before archived happens later.
+    const byActivityAsc = (a, b) => (activityTimeOf(a) ?? 0) - (activityTimeOf(b) ?? 0)
+      || (a.header?.createdAt ?? 0) - (b.header?.createdAt ?? 0)
+    const byActivityDesc = (a, b) => (activityTimeOf(b) ?? 0) - (activityTimeOf(a) ?? 0)
+      || (b.header?.createdAt ?? 0) - (a.header?.createdAt ?? 0)
+    const byCreatedDesc = (a, b) => (b.header?.createdAt ?? 0) - (a.header?.createdAt ?? 0)
+      || byActivityDesc(a, b)
+    const comparator = sort === 'active-asc'
+      ? byActivityAsc
+      : sort === 'created-desc' ? byCreatedDesc : byActivityDesc
+    matching.sort(comparator)
     const openAll = matching.filter(record => !archivedSet.has(String(record.header.id)))
     const archivedAll = matching.filter(record => archivedSet.has(String(record.header.id)))
     const open = openAll.slice(0, MAX_CANDIDATES)
@@ -747,6 +765,7 @@ async function handleCandidates(ctx, _storePromise, request) {
       range,
       basis,
       state,
+      sort,
       archivedCount: archivedSet.size,
       archivedSessionIds: archived,
       openCount: open.length,
