@@ -343,7 +343,7 @@ window.__ModuleLoader__.load({
     }
 
     const CSS = `
-.dkam-root{--dkam-border:var(--dsw-alias-border-l2,rgba(127,127,127,.22));--dkam-border-strong:var(--dsw-alias-border-l1,rgba(127,127,127,.36));--dkam-bg:var(--dsw-alias-bg-base,#fff);--dkam-layer:var(--dsw-alias-bg-layer-1,#fff);--dkam-layer-2:var(--dsw-alias-bg-layer-2,#f5f6f8);--dkam-text:var(--dsw-alias-label-primary,#1f2328);--dkam-muted:var(--dsw-alias-label-secondary,#656d76);--dkam-faint:var(--dsw-alias-label-tertiary,#8b949e);--dkam-brand:var(--dsw-alias-brand-primary,#247bbf);--dkam-brand-soft:var(--dsw-alias-brand-primary-soft,rgba(36,123,191,.1));--dkam-hover:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.1));--dkam-danger:var(--dsw-alias-state-error-primary,#d64545);--dkam-radius:var(--dsw-radius-lg,12px);display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden;background:var(--dkam-bg);color:var(--dkam-text);font-size:14px;line-height:1.45;font-family:inherit}
+.dkam-root{--dkam-border:var(--dsw-alias-border-l2,rgba(127,127,127,.22));--dkam-border-strong:var(--dsw-alias-border-l1,rgba(127,127,127,.36));--dkam-bg:var(--dsw-alias-bg-base,#fff);--dkam-layer:var(--dsw-alias-bg-layer-1,#fff);--dkam-layer-2:var(--dsw-alias-bg-layer-2,#f5f6f8);--dkam-text:var(--dsw-alias-label-primary,#1f2328);--dkam-muted:var(--dsw-alias-label-secondary,#656d76);--dkam-faint:var(--dsw-alias-label-tertiary,#8b949e);--dkam-brand:var(--dsw-alias-brand-primary,#247bbf);--dkam-brand-soft:var(--dsw-alias-brand-primary-soft,rgba(36,123,191,.1));--dkam-hover:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.1));--dkam-danger:var(--dsw-alias-state-error-primary,#d64545);--dkam-on-brand:var(--dsw-alias-label-primary-foreground,#fff);--dkam-radius:var(--dsw-radius-lg,12px);display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden;background:var(--dkam-bg);color:var(--dkam-text);font-size:14px;line-height:1.45;font-family:inherit}
 .dkam-root *{box-sizing:border-box}
 .dkam-head{flex:0 0 auto;padding:22px 26px 14px;border-bottom:1px solid var(--dkam-border);background:linear-gradient(180deg,var(--dkam-layer),var(--dkam-bg))}
 .dkam-head-row{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
@@ -364,7 +364,7 @@ window.__ModuleLoader__.load({
 .dkam-btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;height:32px;padding:0 11px;border:1px solid var(--dkam-border);border-radius:8px;background:var(--dkam-layer);color:var(--dkam-text);font:inherit;font-size:12.5px;font-weight:500;cursor:pointer;white-space:nowrap}
 .dkam-btn:hover:not(:disabled){background:var(--dkam-hover);border-color:var(--dkam-border-strong)}
 .dkam-btn:disabled{opacity:.45;cursor:default}
-.dkam-btn-primary{border-color:transparent;background:var(--dkam-brand);color:var(--dkam-label-inverted,#fff)}
+.dkam-btn-primary{border-color:transparent;background:var(--dkam-brand);color:var(--dkam-on-brand)}
 .dkam-btn-primary:hover:not(:disabled){filter:brightness(1.06);background:var(--dkam-brand)}
 .dkam-btn-quiet{border-color:transparent;background:transparent;color:var(--dkam-muted)}
 .dkam-btn-quiet:hover:not(:disabled){background:var(--dkam-hover);color:var(--dkam-text)}
