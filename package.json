@@ -1,6 +1,6 @@
 {
   "name": "dk-dsh-archive-manager",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "private": true,
   "type": "module",
   "description": "An archive center for DeepSeek Harness: browse, annotate, preview, restore, and export archived sessions",
@@ -26,7 +26,7 @@
   ],
   "engines": {
     "node": ">=22.19.0",
-    "dsh": "0.2.2-rc.1 || 0.2.2-rc.2 || 0.2.2-rc.3"
+    "dsh": ">=0.2.2-rc.1 <0.3.0"
   },
   "scripts": {
     "check": "node --check index.js && node --check client.js && node --check src/model.js && node --check src/store.js && node --test test/*.test.js",
