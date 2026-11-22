@@ -149,14 +149,22 @@ window.__ModuleLoader__.load({
         batchUseAllTime: 'Use all time',
         batchUseAllStates: 'Show all sessions',
         batchRestored: 'Restored',
-        batchActiveWarn: 'These sessions are doing work. Confirm that stopping their activity is okay.',
+        batchActiveWarn: 'These sessions are doing work. Scheduled tasks that target them will be paused, not deleted.',
+        batchActiveWarnNoSchedule: 'These sessions are doing work. Scheduled tasks that target them will be deleted permanently.',
+        batchActiveWarnNeutral: 'These sessions are doing work. Confirm that their activity can be stopped.',
+        batchScheduleTasks: 'Scheduled tasks:',
+        batchSchedulesPaused: 'Scheduled tasks paused',
+        batchSchedulesPauseFailed: 'some scheduled tasks could not be paused and may be deleted',
+        batchSchedulesResumed: 'Scheduled tasks resumed',
+        batchSchedulesResumeFailed: 'some scheduled tasks could not be resumed; enable them in Automation tasks',
         candidateArchived: 'Archived',
         candidateActive: 'Active',
         candidateActiveHint: 'This session is doing work',
         candidateIdle: 'Idle',
         archiveSelected: 'Archive selected',
         stopAndArchive: 'Stop activity and archive',
-        confirmStop: 'I understand this stops the listed activity and archives the session.',
+        confirmStop: 'I understand this stops the listed activity and archives the session; scheduled tasks will be paused.',
+        confirmStopNoSchedule: 'I understand this stops the listed activity and archives the session.',
         batchFailed: 'Some sessions could not be archived',
         batchArchived: 'Archived',
         archiveNoticeHint: 'Archived. Open Archive Manager to see the archive time, note, and tags.',
@@ -308,14 +316,22 @@ window.__ModuleLoader__.load({
         batchUseAllTime: '使用全部时间',
         batchUseAllStates: '查看全部会话',
         batchRestored: '已恢复',
-        batchActiveWarn: '这些会话正在执行任务，请确认可以停止其活动。',
+        batchActiveWarn: '这些会话正在执行任务。其中的定时任务会被暂停，不会删除。',
+        batchActiveWarnNoSchedule: '这些会话正在执行任务。其中的定时任务会被永久删除，无法恢复。',
+        batchActiveWarnNeutral: '这些会话正在执行任务。请确认可以停止其活动。',
+        batchScheduleTasks: '定时任务：',
+        batchSchedulesPaused: '已暂停定时任务',
+        batchSchedulesPauseFailed: '部分定时任务暂停失败，归档时可能被删除',
+        batchSchedulesResumed: '已重新启用定时任务',
+        batchSchedulesResumeFailed: '部分定时任务未能重新启用，请在“自动化任务”中手动启用',
         candidateArchived: '已归档',
         candidateActive: '活动中',
         candidateActiveHint: '该会话正在执行任务',
         candidateIdle: '空闲',
         archiveSelected: '归档所选',
         stopAndArchive: '停止活动并归档',
-        confirmStop: '我确认停止下列活动并归档该会话。',
+        confirmStop: '我确认停止下列活动并归档该会话；其中的定时任务会被暂停。',
+        confirmStopNoSchedule: '我确认停止下列活动并归档该会话。',
         batchFailed: '部分会话归档失败',
         batchArchived: '已归档',
         archiveNoticeHint: '已归档。打开“归档管理”可查看归档时间、备注和标签。',
@@ -681,6 +697,7 @@ window.__ModuleLoader__.load({
       const [batchBusy, setBatchBusy] = useState(false)
       const [batchFailures, setBatchFailures] = useState([])
       const [batchConfirmStop, setBatchConfirmStop] = useState(false)
+      const [batchScheduleAvailable, setBatchScheduleAvailable] = useState(false)
       const [transcript, setTranscript] = useState(null)
       const dialogRef = useRef(null)
       const noticeTimer = useRef(null)
@@ -926,13 +943,29 @@ window.__ModuleLoader__.load({
         }
       }
 
+      // Restoring a session also resumes the scheduled tasks this plugin paused
+      // for the archive stop; report that alongside the restore hint.
+      const scheduleResumeParts = (data) => {
+        const resumes = Array.isArray(data?.scheduleResumes) ? data.scheduleResumes : []
+        let resumed = 0
+        let failures = 0
+        for (const entry of resumes) {
+          if (Array.isArray(entry.resumed)) resumed += entry.resumed.length
+          if (Array.isArray(entry.failed)) failures += entry.failed.length
+        }
+        const parts = []
+        if (resumed > 0) parts.push(`${tr('batchSchedulesResumed')} ${resumed}`)
+        if (failures > 0) parts.push(tr('batchSchedulesResumeFailed'))
+        return parts
+      }
+
       const restoreOne = async (item) => {
         if (busy) return
         setBusy(item.sessionId)
         try {
           const data = await post('unarchive', { sessionId: item.sessionId })
           if (data.ok === false) throw new Error(reasonText(data.reason))
-          setNotice(tr('restoreOpenHint'))
+          setNotice([tr('restoreOpenHint'), ...scheduleResumeParts(data)].join(' · '))
           setPreview(null)
           reload()
         } catch (error) {
@@ -948,9 +981,9 @@ window.__ModuleLoader__.load({
         try {
           const data = await post('unarchive-many', { sessionIds: restorableSelected })
           if (Array.isArray(data.failed) && data.failed.length > 0) {
-            setNotice(`${tr('partialRestore')} (${data.failed.length})`)
+            setNotice([`${tr('partialRestore')} (${data.failed.length})`, ...scheduleResumeParts(data)].join(' · '))
           } else {
-            setNotice(tr('restoreOpenHint'))
+            setNotice([tr('restoreOpenHint'), ...scheduleResumeParts(data)].join(' · '))
           }
           setSelected(new Set())
           setPreview(null)
@@ -1100,14 +1133,23 @@ window.__ModuleLoader__.load({
           const failed = Array.isArray(data.failed) ? data.failed : []
           const active = failed.filter(item => item.reason === 'active')
           const archived = Array.isArray(data.archived) ? data.archived : []
+          setBatchScheduleAvailable(data.scheduleAvailable === true)
           setBatchFailures(active)
           setBatchSelected(new Set(active.map(failure => failure.sessionId)))
+          const pauses = Array.isArray(data.schedulePauses) ? data.schedulePauses : []
+          const pausedTasks = []
+          const pauseFailures = []
+          for (const entry of pauses) {
+            if (Array.isArray(entry.paused)) pausedTasks.push(...entry.paused)
+            if (Array.isArray(entry.failed)) pauseFailures.push(...entry.failed)
+          }
+          const parts = [failed.length === 0 ? `${tr('batchArchived')} ${archived.length}` : tr('batchFailed')]
+          if (pausedTasks.length > 0) parts.push(`${tr('batchSchedulesPaused')} ${pausedTasks.length}`)
+          if (pauseFailures.length > 0) parts.push(tr('batchSchedulesPauseFailed'))
+          setNotice(parts.join(' · '))
           if (failed.length === 0) {
             setBatchConfirmStop(false)
-            setNotice(`${tr('batchArchived')} ${archived.length}`)
             reloadBatch()
-          } else {
-            setNotice(tr('batchFailed'))
           }
           reload()
         } catch (error) {
@@ -1132,9 +1174,19 @@ window.__ModuleLoader__.load({
             ...batchOpenSelected.map(candidate => candidate.sessionId),
             ...failed.map(failure => failure.sessionId),
           ]))
-          setNotice(failed.length === 0
+          const resumes = Array.isArray(data.scheduleResumes) ? data.scheduleResumes : []
+          const resumedTasks = []
+          const resumeFailures = []
+          for (const entry of resumes) {
+            if (Array.isArray(entry.resumed)) resumedTasks.push(...entry.resumed)
+            if (Array.isArray(entry.failed)) resumeFailures.push(...entry.failed)
+          }
+          const parts = [failed.length === 0
             ? `${tr('batchRestored')} ${restored.length}`
-            : tr('partialRestore'))
+            : tr('partialRestore')]
+          if (resumedTasks.length > 0) parts.push(`${tr('batchSchedulesResumed')} ${resumedTasks.length}`)
+          if (resumeFailures.length > 0) parts.push(tr('batchSchedulesResumeFailed'))
+          setNotice(parts.join(' · '))
           reloadBatch()
           reload()
         } catch (error) {
@@ -1155,9 +1207,10 @@ window.__ModuleLoader__.load({
       const latestArchived = summary?.latestArchivedAt
       const count = summary?.count ?? items.length
 
-      const activityLabels = (activity) => {
+      const activityLabels = (activity, excludeKind) => {
         const out = []
         for (const group of Array.isArray(activity) ? activity : []) {
+          if (excludeKind !== undefined && group?.kind === excludeKind) continue
           const items = Array.isArray(group?.items) ? group.items : []
           if (items.length === 0) {
             if (group?.kind) out.push(String(group.kind))
@@ -1166,6 +1219,17 @@ window.__ModuleLoader__.load({
           for (const entry of items) out.push(String(entry?.label ?? entry?.id ?? group.kind ?? ''))
         }
         return out.filter(Boolean).slice(0, 8)
+      }
+
+      const scheduleTaskLabels = (activity) => {
+        const out = []
+        for (const group of Array.isArray(activity) ? activity : []) {
+          if (group?.kind !== 'schedule') continue
+          for (const entry of Array.isArray(group.items) ? group.items : []) {
+            out.push(String(entry?.label ?? entry?.id ?? ''))
+          }
+        }
+        return out.filter(Boolean).slice(0, 5)
       }
 
       const statCard = (label, value, key) => h('div', { className: 'dkam-stat', key },
@@ -1192,6 +1256,13 @@ window.__ModuleLoader__.load({
           ['all', tr('batchStateAll')],
         ]
         const failureTitle = (sessionId) => batchItems?.find(candidate => candidate.sessionId === sessionId)?.title || sessionId
+        // The warn box can only promise pausing when a failure actually carries
+        // scheduled tasks; otherwise the neutral copy is the truthful one.
+        const showScheduleTasks = batchFailures.some(failure => scheduleTaskLabels(failure.activity).length > 0)
+        const warnTitle = showScheduleTasks
+          ? (batchScheduleAvailable ? 'batchActiveWarn' : 'batchActiveWarnNoSchedule')
+          : 'batchActiveWarnNeutral'
+        const stopCopy = showScheduleTasks && batchScheduleAvailable ? 'confirmStop' : 'confirmStopNoSchedule'
         return h('div', { className: 'dkam-batch' },
           h('div', { className: 'dkam-batch-filters' },
             h('label', { className: 'dkam-search' },
@@ -1343,14 +1414,19 @@ window.__ModuleLoader__.load({
           ),
           batchFailures.length > 0
             ? h('div', { className: 'dkam-batch-warn dkam-warn-box' },
-              h('h3', null, tr('batchActiveWarn')),
+              h('h3', null, tr(warnTitle)),
               h('p', null, tr('candidateActiveHint')),
               h('ul', null,
                 batchFailures.map((failure) => {
-                  const labels = activityLabels(failure.activity)
+                  const labels = activityLabels(failure.activity, 'schedule')
+                  const tasks = scheduleTaskLabels(failure.activity)
                   return h('li', { key: failure.sessionId },
                     failureTitle(failure.sessionId),
                     labels.length > 0 ? ` — ${labels.join(', ')}` : '',
+                    tasks.length > 0
+                      ? h('div', { className: 'dkam-hint' },
+                        `${tr('batchScheduleTasks')} ${tasks.join('、')}`)
+                      : null,
                   )
                 }),
               ),
@@ -1360,7 +1436,7 @@ window.__ModuleLoader__.load({
                   checked: batchConfirmStop,
                   onChange: event => setBatchConfirmStop(event.target.checked),
                 }),
-                tr('confirmStop'),
+                tr(stopCopy),
               ),
             )
             : null,

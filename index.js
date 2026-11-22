@@ -32,6 +32,7 @@ import {
   entryForRestore,
   mergeEntryPatch,
   normalizeView,
+  PAUSED_SCHEDULES_MAX,
   summarizeEvents,
   summarizeList,
   transcriptPage,
@@ -502,11 +503,13 @@ async function handleUnarchive(ctx, storePromise, request) {
 
   try {
     const archived = new Set(await archivedIds(ctx))
-    await restoreArchivedSession(ctx, storePromise, sessionId, archived)
+    const scheduleResumes = []
+    await restoreArchivedSession(ctx, storePromise, sessionId, archived, scheduleResumes)
     return json({
       ok: true,
       restored: [sessionId],
       failed: [],
+      scheduleResumes,
       archivedSessionIds: [...archived],
     })
   } catch (error) {
@@ -536,9 +539,10 @@ async function handleUnarchiveMany(ctx, storePromise, request) {
   const archived = new Set(await archivedIds(ctx))
   const restored = []
   const failed = []
+  const scheduleResumes = []
   for (const sessionId of unique) {
     try {
-      await restoreArchivedSession(ctx, storePromise, sessionId, archived)
+      await restoreArchivedSession(ctx, storePromise, sessionId, archived, scheduleResumes)
       restored.push(sessionId)
     } catch (error) {
       ctx.logger?.warn?.('dk-dsh-archive-manager: batch unarchive failed for %s: %o', sessionId, error)
@@ -549,6 +553,7 @@ async function handleUnarchiveMany(ctx, storePromise, request) {
     ok: failed.length === 0,
     restored,
     failed,
+    scheduleResumes,
     archivedSessionIds: [...archived],
   })
 }
@@ -763,7 +768,9 @@ async function handleCandidates(ctx, _storePromise, request) {
 /**
  * Archive several sessions on explicit user request. Active sessions are never
  * stopped unless the Client sends both `stopActivity` and `confirmStop`; without
- * them the failure carries the activity details for a confirmation.
+ * them the failure carries the activity details for a confirmation. A confirmed
+ * stop pauses the scheduled tasks targeting each session first, because DSH's
+ * archiving stop deletes them, and records them on the archive entry.
  * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
  * @param {Promise<object>} storePromise - Metadata store.
  * @param {Request} request - Incoming request.
@@ -786,6 +793,8 @@ async function handleArchiveMany(ctx, storePromise, request, userArchiving) {
 
   const unique = [...new Set(sessionIds)]
   const archivedNow = new Set(await archivedIds(ctx))
+  const schedule = scheduleService(ctx)
+  const schedulePauses = []
   const archived = []
   const failed = []
   for (const sessionId of unique) {
@@ -794,16 +803,37 @@ async function handleArchiveMany(ctx, storePromise, request, userArchiving) {
       continue
     }
     userArchiving.add(sessionId)
+    let pause
     try {
+      // DSH's archiving stop deletes every task that targets the session. A
+      // confirmed stop pauses them first so the user can resume after restore.
+      if (stopActivity) pause = await pauseSessionSchedules(ctx, schedule, sessionId)
       await ctx.workspaceRegistry.archiveSession(sessionId, stopActivity ? { stopActivity: true } : undefined)
       archived.push(sessionId)
       try {
         const store = await storePromise
-        await store.put(sessionId, entryForArchive(sessionId, store.get(sessionId), Date.now(), 'user'))
+        const entry = entryForArchive(
+          sessionId,
+          store.get(sessionId),
+          Date.now(),
+          'user',
+          pause?.paused ?? [],
+        )
+        await store.put(sessionId, entry)
       } catch (error) {
         ctx.logger?.warn?.('dk-dsh-archive-manager: could not record batch archive for %s: %o', sessionId, error)
       }
     } catch (error) {
+      if (pause !== undefined && pause.paused.length > 0) {
+        const rolled = await resumeSessionSchedules(ctx, schedule, sessionId, pause.paused)
+        if (rolled.failed.length > 0) {
+          ctx.logger?.warn?.(
+            'dk-dsh-archive-manager: archive failed and %d paused schedule(s) could not be resumed for %s',
+            rolled.failed.length,
+            sessionId,
+          )
+        }
+      }
       if (error?.name === 'WorkspaceActiveSessionError') {
         failed.push({ sessionId, reason: 'active', activity: Array.isArray(error.activity) ? error.activity : [] })
       } else if (error?.code === 'SESSION_NOT_FOUND' || error?.name === 'SessionNotFoundError') {
@@ -815,12 +845,17 @@ async function handleArchiveMany(ctx, storePromise, request, userArchiving) {
     } finally {
       userArchiving.delete(sessionId)
     }
+    if (pause !== undefined && (pause.paused.length > 0 || pause.failed.length > 0)) {
+      schedulePauses.push({ sessionId, paused: pause.paused, failed: pause.failed })
+    }
   }
 
   return json({
     ok: failed.length === 0,
     archived,
     failed,
+    scheduleAvailable: schedule !== undefined,
+    schedulePauses,
     archivedSessionIds: await archivedIds(ctx),
   })
 }
@@ -1026,17 +1061,188 @@ function candidateItem(record, archived, activity, workspaceOf, titleOfSession, 
 }
 
 /**
+ * Resolve the schedule service when the profile has one. Batch archiving is a
+ * core feature, so a profile without the plugin degrades to DSH's own
+ * delete-on-stop behaviour instead of failing the batch.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @returns {object | undefined} Schedule service, or undefined when absent.
+ */
+function scheduleService(ctx) {
+  try {
+    const service = typeof ctx.get === 'function' ? ctx.get('schedule') : ctx.schedule
+    if (service === null || service === undefined) return undefined
+    if (typeof service.catalog !== 'function' || typeof service.edit !== 'function') return undefined
+    return service
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Active tasks that deliver into one session. A `new` target creates a Session
+ * per delivery, so it is never bound to the archived one.
+ * @param {unknown} catalog - Task list from the schedule service.
+ * @param {string} sessionId - Session being archived.
+ * @returns {object[]} Matching tasks.
+ */
+function activeSessionTasks(catalog, sessionId) {
+  return (Array.isArray(catalog) ? catalog : []).filter(task =>
+    task?.status === 'active'
+    && task?.target?.kind !== 'new'
+    && task?.target?.sessionId === sessionId)
+}
+
+/**
+ * Readable task name for a response, falling back to the id.
+ * @param {object} task - Catalog entry.
+ * @returns {string} Title or id.
+ */
+function scheduleTaskTitle(task) {
+  if (typeof task?.title === 'string' && task.title.length > 0) return task.title
+  return String(task?.id ?? '')
+}
+
+/**
+ * Pause every active task targeting a session before DSH stops its activity.
+ * An archiving stop deletes those rows, and a paused task survives the stop and
+ * can be resumed after the session is restored. One failing task never blocks
+ * the archive; it is reported to the caller instead.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @param {object | undefined} schedule - Schedule service, when present.
+ * @param {string} sessionId - Session being archived.
+ * @returns {Promise<{ available: boolean, paused: { id: string, title: string }[], failed: object[] }>} Outcome.
+ */
+async function pauseSessionSchedules(ctx, schedule, sessionId) {
+  const result = { available: schedule !== undefined, paused: [], failed: [] }
+  if (schedule === undefined) return result
+  let catalog
+  try {
+    catalog = await schedule.catalog()
+  } catch (error) {
+    ctx.logger?.warn?.('dk-dsh-archive-manager: schedule catalog failed for %s: %o', sessionId, error)
+    return result
+  }
+  const matched = activeSessionTasks(catalog, sessionId)
+  const tasks = matched.slice(0, PAUSED_SCHEDULES_MAX)
+  for (const task of matched.slice(PAUSED_SCHEDULES_MAX)) {
+    // Anything past the cap cannot be recorded on the entry, so it is reported
+    // instead of being silently left for DSH's stop to delete.
+    result.failed.push({ id: task.id, title: scheduleTaskTitle(task), reason: 'too-many' })
+  }
+  for (const task of tasks) {
+    const title = scheduleTaskTitle(task)
+    try {
+      const outcome = await schedule.edit({ id: task.id, action: 'update', patch: { active: false } })
+      if (typeof outcome?.code === 'string') {
+        result.failed.push({ id: task.id, title, reason: outcome.code })
+        continue
+      }
+      result.paused.push({ id: task.id, title })
+    } catch (error) {
+      ctx.logger?.warn?.('dk-dsh-archive-manager: could not pause schedule %s: %o', task.id, error)
+      result.failed.push({ id: task.id, title, reason: 'pause-failed' })
+    }
+  }
+  return result
+}
+
+/**
+ * Resume the tasks this plugin paused. Runs after the session is unarchived:
+ * resuming validates the target, and an archived target is refused.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @param {object | undefined} schedule - Schedule service, when present.
+ * @param {string} sessionId - Restored session.
+ * @param {unknown} paused - Tasks recorded on the archive entry.
+ * @returns {Promise<{ available: boolean, resumed: object[], failed: object[], skipped: object[] }>} Outcome.
+ */
+async function resumeSessionSchedules(ctx, schedule, sessionId, paused) {
+  const result = { available: schedule !== undefined, resumed: [], failed: [], skipped: [] }
+  const items = Array.isArray(paused) ? paused : []
+  if (items.length === 0) return result
+  if (schedule === undefined) {
+    result.skipped = items.map(item => ({ id: item.id, title: item.title, reason: 'service-unavailable' }))
+    return result
+  }
+  let catalog
+  try {
+    catalog = await schedule.catalog()
+  } catch (error) {
+    ctx.logger?.warn?.('dk-dsh-archive-manager: schedule catalog failed for %s: %o', sessionId, error)
+    result.skipped = items.map(item => ({ id: item.id, title: item.title, reason: 'catalog-failed' }))
+    return result
+  }
+  const byId = new Map((Array.isArray(catalog) ? catalog : []).map(task => [task?.id, task]))
+  for (const item of items) {
+    const task = byId.get(item.id)
+    if (task === undefined) {
+      result.skipped.push({ id: item.id, title: item.title, reason: 'missing' })
+      continue
+    }
+    // Only tasks this plugin paused, still paused, and still bound to the
+    // restored session are safe to touch; anything else belongs to the user.
+    if (task.status !== 'paused') {
+      result.skipped.push({ id: item.id, title: item.title, reason: 'not-paused' })
+      continue
+    }
+    if (task?.target?.kind === 'new' || task?.target?.sessionId !== sessionId) {
+      result.skipped.push({ id: item.id, title: item.title, reason: 'retargeted' })
+      continue
+    }
+    try {
+      const outcome = await schedule.edit({ id: task.id, action: 'update', patch: { active: true } })
+      if (typeof outcome?.code === 'string') {
+        result.failed.push({ id: task.id, title: item.title, reason: outcome.code })
+        continue
+      }
+      result.resumed.push({ id: task.id, title: item.title })
+    } catch (error) {
+      ctx.logger?.warn?.('dk-dsh-archive-manager: could not resume schedule %s: %o', task.id, error)
+      result.failed.push({ id: task.id, title: item.title, reason: 'resume-failed' })
+    }
+  }
+  return result
+}
+
+/**
+ * Read the paused-task list recorded on a session's archive entry.
+ * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
+ * @param {Promise<object>} storePromise - Metadata store.
+ * @param {string} sessionId - Archived session.
+ * @returns {Promise<{ id: string, title: string }[]>} Recorded tasks.
+ */
+async function pausedSchedulesOf(ctx, storePromise, sessionId) {
+  try {
+    const store = await storePromise
+    const current = store.get(sessionId)
+    return Array.isArray(current?.pausedSchedules) ? current.pausedSchedules : []
+  } catch (error) {
+    // A metadata failure must not block the restore; the tasks stay paused and
+    // remain visible in Automation tasks.
+    ctx.logger?.warn?.('dk-dsh-archive-manager: could not read paused schedules for %s: %o', sessionId, error)
+    return []
+  }
+}
+
+/**
  * Restore one archived session and keep the caller's archive set in sync.
+ * Scheduled tasks this plugin paused are resumed after the unarchive, because
+ * resuming validates the target Session.
  * @param {import('@deepseek-ai/cordis').Context} ctx - Host context.
  * @param {Promise<object>} storePromise - Metadata store.
  * @param {string} sessionId - Session to restore.
  * @param {Set<string>} archived - Archive set for the current response.
+ * @param {object[]} [scheduleResumes] - Receives one outcome per restored session.
  * @returns {Promise<boolean>} Whether the session was in the archive set.
  */
-async function restoreArchivedSession(ctx, storePromise, sessionId, archived) {
+async function restoreArchivedSession(ctx, storePromise, sessionId, archived, scheduleResumes) {
   if (!archived.has(sessionId)) return false
+  const paused = await pausedSchedulesOf(ctx, storePromise, sessionId)
   await ctx.workspaceRegistry.unarchiveSession(sessionId)
   archived.delete(sessionId)
+  if (paused.length > 0) {
+    const outcome = await resumeSessionSchedules(ctx, scheduleService(ctx), sessionId, paused)
+    if (scheduleResumes !== undefined) scheduleResumes.push({ sessionId, ...outcome })
+  }
   await markRestored(ctx, storePromise, sessionId)
   return true
 }

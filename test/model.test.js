@@ -78,6 +78,22 @@ test('entryForRestore preserves note and tags', () => {
   assert.equal(restored.restoredAt, 20)
 })
 
+test('paused schedule records survive normalization and clear on restore', () => {
+  const archived = entryForArchive('s1', undefined, 100, 'user', [
+    { id: 'task-1', title: ' Daily market reminder ' },
+    { id: 'task-1', title: 'duplicate' },
+    { id: '' },
+  ])
+  assert.deepEqual(archived.pausedSchedules, [{ id: 'task-1', title: 'Daily market reminder' }])
+  assert.deepEqual(normalizeEntry('s1', archived).pausedSchedules, [{ id: 'task-1', title: 'Daily market reminder' }])
+
+  const restored = entryForRestore('s1', archived, 200)
+  assert.equal('pausedSchedules' in restored, false)
+
+  const cleared = entryForArchive('s1', archived, 300, 'user', [])
+  assert.equal('pausedSchedules' in cleared, false)
+})
+
 test('mergeEntryPatch edits note/tags without dropping the archive time', () => {
   const entry = normalizeEntry('s1', { archivedAt: 10, note: 'old', tags: ['old'] })
   const next = mergeEntryPatch('s1', entry, { note: ' new ', tags: 'a, B' })

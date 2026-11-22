@@ -15,6 +15,8 @@ export const NOTE_MAX = 2000
 export const TAG_MAX = 40
 /** Most tags kept on one archive entry. */
 export const TAGS_MAX = 20
+/** Most scheduled tasks remembered on one archive entry. */
+export const PAUSED_SCHEDULES_MAX = 20
 /** Longest saved-view name accepted. */
 export const VIEW_NAME_MAX = 40
 /** Most saved views kept per profile. */
@@ -65,6 +67,27 @@ export function normalizeTags(value) {
     if (tags.length >= TAGS_MAX) break
   }
   return tags
+}
+
+/**
+ * Normalize the scheduled tasks this plugin paused so an archive stop does not
+ * delete them. Each item keeps the task id and its last known title for the UI.
+ * @param {unknown} value - Stored list.
+ * @returns {{ id: string, title: string }[]} Normalized list.
+ */
+export function normalizePausedSchedules(value) {
+  const out = []
+  const seen = new Set()
+  for (const raw of Array.isArray(value) ? value : []) {
+    if (raw === null || typeof raw !== 'object') continue
+    const id = typeof raw.id === 'string' && raw.id.length > 0 ? raw.id.slice(0, 200) : undefined
+    if (id === undefined || seen.has(id)) continue
+    seen.add(id)
+    const title = typeof raw.title === 'string' ? raw.title.trim().slice(0, 200) : ''
+    out.push({ id, title })
+    if (out.length >= PAUSED_SCHEDULES_MAX) break
+  }
+  return out
 }
 
 /**
@@ -132,6 +155,7 @@ export function normalizeEntry(sessionId, value) {
     : undefined
   const note = normalizeNote(record.note)
   const tags = normalizeTags(record.tags)
+  const pausedSchedules = normalizePausedSchedules(record.pausedSchedules)
   const source = record.source === 'user' ? 'user' : 'plugin'
   let history = normalizeHistory(record.history)
   // Old records predate the trail. Reconstruct the events they already know
@@ -149,6 +173,7 @@ export function normalizeEntry(sessionId, value) {
     inferred: archivedAt !== undefined ? record.inferred !== false : true,
     history,
   }
+  if (pausedSchedules.length > 0) entry.pausedSchedules = pausedSchedules
   if (archivedAt !== undefined) entry.archivedAt = archivedAt
   if (note !== undefined) entry.note = note
   if (restoredAt !== undefined) entry.restoredAt = restoredAt
@@ -163,9 +188,10 @@ export function normalizeEntry(sessionId, value) {
  * @param {unknown} current - Existing entry, if any.
  * @param {number} now - Timestamp for a newly observed archive.
  * @param {'user' | 'plugin' | 'system'} [source] - Who triggered the archive.
+ * @param {unknown} [pausedSchedules] - Tasks paused for this archive; omit to keep the stored list.
  * @returns {ReturnType<typeof normalizeEntry>} Entry to persist.
  */
-export function entryForArchive(sessionId, current, now, source = 'plugin') {
+export function entryForArchive(sessionId, current, now, source = 'plugin', pausedSchedules = undefined) {
   const base = normalizeEntry(sessionId, current)
   const existing = base.archivedAt
   const archivedAt = base.restoredAt !== undefined ? now : existing ?? now
@@ -177,6 +203,11 @@ export function entryForArchive(sessionId, current, now, source = 'plugin') {
     history: appendHistory(base.history, archivedAt, 'archived', source),
   }
   delete next.restoredAt
+  if (pausedSchedules !== undefined) {
+    const paused = normalizePausedSchedules(pausedSchedules)
+    if (paused.length > 0) next.pausedSchedules = paused
+    else delete next.pausedSchedules
+  }
   return next
 }
 
@@ -190,11 +221,15 @@ export function entryForArchive(sessionId, current, now, source = 'plugin') {
  */
 export function entryForRestore(sessionId, current, now, source = 'user') {
   const base = normalizeEntry(sessionId, current)
-  return {
+  const next = {
     ...base,
     restoredAt: now,
     history: appendHistory(base.history, now, 'restored', source),
   }
+  // The paused tasks were resumed (or reported as skipped) by the caller, so a
+  // restore never leaves a stale promise to resume them again.
+  delete next.pausedSchedules
+  return next
 }
 
 /**

@@ -36,9 +36,11 @@ without changing the built-in archive set or deleting any data.
   the default oldest-first view surfaces the stalest sessions and the cap keeps
   the rows the chosen order puts first. Active rows show the reported activity;
   the Host refuses to stop or archive them until the user explicitly confirms.
-  No silent `stopActivity`. Pinned sessions are left out of the candidate pool
-  entirely, so a bulk action can never archive or restore one by accident; unpin
-  a session in DSH's own sidebar to make it eligible again.
+  No silent `stopActivity`. Scheduled tasks that target a stopped session are
+  paused before the stop and recorded on its archive entry, so restoring the
+  session resumes them instead of losing them. Pinned sessions are left out of
+  the candidate pool entirely, so a bulk action can never archive or restore one
+  by accident; unpin a session in DSH's own sidebar to make it eligible again.
 - **Restore** — one session or a selection, through
   `workspaceRegistry.unarchiveSession`.
 - **Capacity** — summed session-log size and unknown-size count. Attachment
@@ -118,6 +120,14 @@ syntax-checked by `npm run check`.
 - Batch candidates call the public `workspace/session-activity` waterfall to
   label active rows. The actual archive call never passes `stopActivity` unless
   the user confirmed; the Host's own activity refusal is the final guard.
+- A confirmed stop first pauses every active task that targets the session
+  through the Host `schedule` service (`catalog`, then `edit` with
+  `patch.active: false`), because DSH's archiving stop deletes those rows. The
+  paused ids are recorded on the archive entry, and `unarchive` resumes only
+  tasks that are still paused and still bound to the restored session, after the
+  unarchive, because resuming validates the target. Without the service the
+  route reports `scheduleAvailable: false` and the Client's confirm box says the
+  tasks will be deleted.
 - `candidates` accepts `range` (`all`, `older3d`, `older7d`, `older30d`, `older90d`),
   `basis` (`activity` or `created`), `state` (`all`, `open`, `archived`), and
   `sort` (`active-asc`, `active-desc`, `created-desc`). It removes pinned
@@ -162,3 +172,8 @@ syntax-checked by `npm run check`.
 - Pin is a registry-global ordering flag, not an archive exemption. Pinned
   sessions are excluded from the batch candidate pool, so unpin one in DSH's
   sidebar if a batch action should see it.
+- Pausing scheduled tasks needs DSH's schedule service. Without it, the confirm
+  box can only warn that tasks will be deleted; the archive stop still removes
+  every task targeting the session. The same deletion happens when a session is
+  stopped and archived from DSH's own sidebar, which this plugin cannot
+  intercept.

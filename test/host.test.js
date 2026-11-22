@@ -9,6 +9,7 @@ import { ROUTE_BASE, apply } from '../index.js'
 const SESSION_ID = 'session-11111111-1111-4111-8111-111111111111'
 const GHOST_ID = 'session-22222222-2222-4222-8222-222222222222'
 const ACTIVE_ID = 'session-33333333-3333-4333-8333-333333333333'
+const FAILING_ID = 'session-44444444-4444-4444-8444-444444444444'
 
 function header(id, overrides = {}) {
   return {
@@ -31,13 +32,24 @@ function snapshot(id) {
   }
 }
 
-function makeHarness({ getter = true, tools = false, config, listHeaders = false, snapshots = [snapshot(SESSION_ID)] } = {}) {
+function makeHarness({ getter = true, tools = false, config, listHeaders = false, snapshots = [snapshot(SESSION_ID)], schedule } = {}) {
   const routes = new Map()
   const listeners = new Map()
   const archived = new Set([SESSION_ID, GHOST_ID])
   const pinned = new Set()
   const registeredTools = new Map()
   const archiveCalls = []
+  const events = []
+
+  const scheduleProxy = schedule === undefined ? undefined : {
+    async catalog() {
+      return schedule.catalog()
+    },
+    async edit(request) {
+      events.push({ kind: 'schedule-edit', id: request.id, active: request.patch?.active })
+      return schedule.edit(request)
+    },
+  }
 
   const workspace = {
     id: 'workspace-1',
@@ -64,12 +76,24 @@ function makeHarness({ getter = true, tools = false, config, listHeaders = false
         },
       },
     },
+    get(name) {
+      if (name === 'schedule') return scheduleProxy
+      if (name === 'tools') return ctx.tools
+      return undefined
+    },
     workspaceRegistry: {
       list() {
         return [workspace]
       },
       async archiveSession(id, options) {
         archiveCalls.push({ id, options })
+        events.push({ kind: 'archive-attempt', id })
+        if (id === FAILING_ID) {
+          const error = new Error('session not found')
+          error.name = 'SessionNotFoundError'
+          error.sessionId = id
+          throw error
+        }
         if (id === ACTIVE_ID && options?.stopActivity !== true) {
           const error = new Error('session is active')
           error.name = 'WorkspaceActiveSessionError'
@@ -81,6 +105,7 @@ function makeHarness({ getter = true, tools = false, config, listHeaders = false
         pinned.delete(id)
       },
       async unarchiveSession(id) {
+        events.push({ kind: 'unarchive', id })
         archived.delete(id)
       },
     },
@@ -205,6 +230,7 @@ function makeHarness({ getter = true, tools = false, config, listHeaders = false
     pinned,
     registeredTools,
     archiveCalls,
+    events,
   }
 }
 
@@ -234,6 +260,32 @@ async function post(routes, name, body, overrides = {}) {
     body: overrides.rawBody ?? JSON.stringify(body ?? {}),
   })
   return route(request)
+}
+
+/**
+ * Minimal schedule service double: rows keyed by task id, catalog read, and the
+ * same update semantics the Host needs (active false pares, true resumes).
+ * @param {object[]} [tasks] - Initial catalog rows.
+ * @returns {object} Service double with `rows` and `edits` for assertions.
+ */
+function makeSchedule(tasks = []) {
+  const rows = new Map(tasks.map(task => [task.id, { ...task, target: { ...task.target } }]))
+  const service = {
+    rows,
+    edits: [],
+    async catalog() {
+      return [...rows.values()].map(task => ({ ...task, target: { ...task.target } }))
+    },
+    async edit(request) {
+      service.edits.push({ id: request.id, patch: { ...request.patch } })
+      const row = rows.get(request.id)
+      if (row === undefined) return { id: request.id, code: 'schedule_not_found' }
+      if (request.patch.active === false) row.status = 'paused'
+      if (request.patch.active === true) row.status = 'active'
+      return { ...row }
+    },
+  }
+  return service
 }
 
 test('registers every POST route', () => {
@@ -631,6 +683,199 @@ test('archive-many refuses to stop an active session without explicit confirmati
     const item = (await listed.json()).items.find(entry => entry.sessionId === ACTIVE_ID)
     assert.equal(item.history.at(-1).action, 'archived')
     assert.equal(item.history.at(-1).source, 'user')
+  })
+})
+
+test('archive-many pauses tasks bound to a stopped session and restore resumes them', async () => {
+  await withHome(async () => {
+    const schedule = makeSchedule([{
+      id: 'task-1',
+      title: 'Daily market reminder',
+      status: 'active',
+      target: { kind: 'session', sessionId: ACTIVE_ID },
+    }])
+    const { routes, events } = makeHarness({ schedule })
+
+    // The refusal path reports that the service exists but pauses nothing yet.
+    const first = await (await post(routes, 'archive-many', { sessionIds: [ACTIVE_ID] })).json()
+    assert.equal(first.scheduleAvailable, true)
+    assert.equal(first.failed[0].reason, 'active')
+    assert.equal(schedule.edits.length, 0)
+    assert.deepEqual(first.schedulePauses, [])
+    events.length = 0
+
+    const confirmed = await (await post(routes, 'archive-many', {
+      sessionIds: [ACTIVE_ID],
+      stopActivity: true,
+      confirmStop: true,
+    })).json()
+    assert.deepEqual(confirmed.archived, [ACTIVE_ID])
+    assert.deepEqual(confirmed.schedulePauses, [{
+      sessionId: ACTIVE_ID,
+      paused: [{ id: 'task-1', title: 'Daily market reminder' }],
+      failed: [],
+    }])
+    // Pause lands before the archive stop, so DSH cannot delete the row.
+    assert.deepEqual(events, [
+      { kind: 'schedule-edit', id: 'task-1', active: false },
+      { kind: 'archive-attempt', id: ACTIVE_ID },
+    ])
+    assert.equal(schedule.rows.get('task-1').status, 'paused')
+
+    const restored = await (await post(routes, 'unarchive', { sessionId: ACTIVE_ID })).json()
+    assert.equal(restored.ok, true)
+    assert.deepEqual(restored.scheduleResumes, [{
+      sessionId: ACTIVE_ID,
+      available: true,
+      resumed: [{ id: 'task-1', title: 'Daily market reminder' }],
+      failed: [],
+      skipped: [],
+    }])
+    // Resuming validates the target, so the unarchive has to come first.
+    assert.deepEqual(events.slice(2), [
+      { kind: 'unarchive', id: ACTIVE_ID },
+      { kind: 'schedule-edit', id: 'task-1', active: true },
+    ])
+    assert.equal(schedule.rows.get('task-1').status, 'active')
+  })
+})
+
+test('archive-many still stops activity when no schedule service is installed', async () => {
+  await withHome(async () => {
+    const { routes } = makeHarness()
+    const confirmed = await (await post(routes, 'archive-many', {
+      sessionIds: [ACTIVE_ID],
+      stopActivity: true,
+      confirmStop: true,
+    })).json()
+    assert.deepEqual(confirmed.archived, [ACTIVE_ID])
+    assert.equal(confirmed.scheduleAvailable, false)
+    assert.deepEqual(confirmed.schedulePauses, [])
+
+    const restored = await (await post(routes, 'unarchive', { sessionId: ACTIVE_ID })).json()
+    assert.deepEqual(restored.scheduleResumes, [])
+  })
+})
+
+test('a failing schedule pause is reported without blocking the archive', async () => {
+  await withHome(async () => {
+    const schedule = makeSchedule([{
+      id: 'task-1',
+      title: 'Daily market reminder',
+      status: 'active',
+      target: { kind: 'session', sessionId: ACTIVE_ID },
+    }])
+    schedule.edit = async (request) => {
+      schedule.edits.push({ id: request.id, patch: { ...request.patch } })
+      throw new Error('schedule write refused')
+    }
+    const { routes } = makeHarness({ schedule })
+
+    const confirmed = await (await post(routes, 'archive-many', {
+      sessionIds: [ACTIVE_ID],
+      stopActivity: true,
+      confirmStop: true,
+    })).json()
+    assert.deepEqual(confirmed.archived, [ACTIVE_ID])
+    assert.deepEqual(confirmed.schedulePauses, [{
+      sessionId: ACTIVE_ID,
+      paused: [],
+      failed: [{ id: 'task-1', title: 'Daily market reminder', reason: 'pause-failed' }],
+    }])
+  })
+})
+
+test('paused tasks are resumed when the archive itself fails', async () => {
+  await withHome(async () => {
+    const schedule = makeSchedule([{
+      id: 'task-2',
+      title: 'Weekly report',
+      status: 'active',
+      target: { kind: 'session', sessionId: FAILING_ID },
+    }])
+    const { routes, events } = makeHarness({ schedule })
+
+    const body = await (await post(routes, 'archive-many', {
+      sessionIds: [FAILING_ID],
+      stopActivity: true,
+      confirmStop: true,
+    })).json()
+    assert.equal(body.ok, false)
+    assert.equal(body.failed[0].reason, 'not-found')
+    assert.deepEqual(events, [
+      { kind: 'schedule-edit', id: 'task-2', active: false },
+      { kind: 'archive-attempt', id: FAILING_ID },
+      { kind: 'schedule-edit', id: 'task-2', active: true },
+    ])
+    assert.equal(schedule.rows.get('task-2').status, 'active')
+
+    // Nothing was archived, so no entry promised a later resume.
+    const restored = await (await post(routes, 'unarchive', { sessionId: FAILING_ID })).json()
+    assert.deepEqual(restored.scheduleResumes, [])
+  })
+})
+
+test('restore skips tasks that were retargeted, resumed by hand, or deleted', async () => {
+  await withHome(async () => {
+    const schedule = makeSchedule([
+      { id: 'retargeted', title: 'Retargeted task', status: 'active', target: { kind: 'session', sessionId: ACTIVE_ID } },
+      { id: 'resumed', title: 'Resumed by hand', status: 'active', target: { kind: 'session', sessionId: ACTIVE_ID } },
+      { id: 'deleted', title: 'Deleted task', status: 'active', target: { kind: 'session', sessionId: ACTIVE_ID } },
+    ])
+    const { routes } = makeHarness({ schedule })
+
+    const archived = await (await post(routes, 'archive-many', {
+      sessionIds: [ACTIVE_ID],
+      stopActivity: true,
+      confirmStop: true,
+    })).json()
+    assert.equal(archived.schedulePauses[0].paused.length, 3)
+
+    // Between archive and restore the user moved one task to another session,
+    // enabled one manually, and deleted one.
+    schedule.rows.get('retargeted').target = { kind: 'session', sessionId: 'session-99999999-9999-4999-8999-999999999999' }
+    schedule.rows.get('resumed').status = 'active'
+    schedule.rows.delete('deleted')
+
+    const restored = await (await post(routes, 'unarchive', { sessionId: ACTIVE_ID })).json()
+    const outcome = restored.scheduleResumes[0]
+    assert.deepEqual(outcome.resumed, [])
+    assert.deepEqual(outcome.failed, [])
+    assert.deepEqual(
+      Object.fromEntries(outcome.skipped.map(item => [item.id, item.reason])),
+      { retargeted: 'retargeted', resumed: 'not-paused', deleted: 'missing' },
+    )
+  })
+})
+
+test('a session with more tasks than the entry can hold reports the overflow', async () => {
+  await withHome(async () => {
+    const tasks = []
+    for (let index = 0; index < 21; index += 1) {
+      tasks.push({
+        id: `bulk-${index}`,
+        title: `Bulk task ${index}`,
+        status: 'active',
+        target: { kind: 'session', sessionId: ACTIVE_ID },
+      })
+    }
+    const schedule = makeSchedule(tasks)
+    const { routes } = makeHarness({ schedule })
+
+    const archived = await (await post(routes, 'archive-many', {
+      sessionIds: [ACTIVE_ID],
+      stopActivity: true,
+      confirmStop: true,
+    })).json()
+    const outcome = archived.schedulePauses[0]
+    assert.equal(outcome.paused.length, 20)
+    assert.deepEqual(outcome.failed, [{ id: 'bulk-20', title: 'Bulk task 20', reason: 'too-many' }])
+    // Only the tasks the entry can remember are touched; the overflow stays active.
+    assert.equal(schedule.rows.get('bulk-20').status, 'active')
+
+    const restored = await (await post(routes, 'unarchive', { sessionId: ACTIVE_ID })).json()
+    assert.equal(restored.scheduleResumes[0].resumed.length, 20)
+    assert.equal(schedule.rows.get('bulk-20').status, 'active')
   })
 })
 
